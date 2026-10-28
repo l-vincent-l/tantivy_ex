@@ -240,7 +240,6 @@ defmodule TantivyEx.Distributed.SearchNode do
       case new_health_status do
         :unhealthy -> %{updated_state | active: false}
         :healthy -> %{updated_state | active: true}
-        _ -> updated_state
       end
 
     {:noreply, updated_state}
