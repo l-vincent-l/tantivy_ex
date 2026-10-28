@@ -213,6 +213,12 @@ defmodule TantivyEx.Tokenizer do
   - `stemming_language`: Language for stemming filter (nil to disable)
   - `remove_long_threshold`: Custom threshold for long word removal (nil to disable, integer for custom threshold)
 
+  The filters apply in this order: lowercasing, stop words, stemming, long word
+  removal.
+
+  The indexes created or opened afterwards get the registered analyzers: a text
+  field can use one by its name (see `TantivyEx.Schema.add_text_field_with_tokenizer/4`).
+
   ## Examples
 
       # Full English text analyzer with default 40-character threshold

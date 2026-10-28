@@ -3,9 +3,9 @@ use rustler::{NifResult, ResourceArc};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use tantivy::tokenizer::{
-    Language, LowerCaser, NgramTokenizer, PreTokenizedString, RegexTokenizer, RemoveLongFilter,
-    SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer, Token, TokenizerManager,
-    WhitespaceTokenizer,
+    Language, LowerCaser, NgramTokenizer, PreTokenizedString, RawTokenizer, RegexTokenizer,
+    RemoveLongFilter, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer, Token,
+    TokenizerManager, WhitespaceTokenizer,
 };
 
 use crate::modules::resources::TokenizerManagerResource;
@@ -161,6 +161,13 @@ pub fn register_text_analyzer(
     Ok(format!("Text analyzer '{}' registered successfully", name))
 }
 
+/// The tokenizer manager holding the registered tokenizers, given to the
+/// indexes so that their fields can use them. A clone shares the tokenizers:
+/// one registered later is seen by the indexes already created.
+pub fn global_tokenizer_manager() -> TokenizerManager {
+    GLOBAL_TOKENIZER_MANAGER.lock().unwrap().clone()
+}
+
 /// Get list of registered tokenizers
 #[rustler::nif]
 pub fn list_tokenizers() -> Vec<String> {
@@ -251,15 +258,20 @@ pub fn process_pre_tokenized_text(tokens: Vec<String>) -> NifResult<String> {
 /// Register common tokenizers with sensible defaults
 #[rustler::nif(schedule = "DirtyCpu")]
 pub fn register_default_tokenizers() -> NifResult<String> {
-    // Register basic tokenizers
-    register_tokenizer_with_tracking("default", SimpleTokenizer::default());
+    // Register basic tokenizers. "default" and "raw" are Tantivy's own: the
+    // indexes get these tokenizers (see global_tokenizer_manager), so they must
+    // not change how the fields using them are indexed.
+    register_tokenizer_with_tracking(
+        "default",
+        TextAnalyzer::builder(SimpleTokenizer::default())
+            .filter(RemoveLongFilter::limit(40))
+            .filter(LowerCaser)
+            .build(),
+    );
     register_tokenizer_with_tracking("simple", SimpleTokenizer::default());
     register_tokenizer_with_tracking("keyword", SimpleTokenizer::default()); // Add keyword tokenizer expected by tests
     register_tokenizer_with_tracking("whitespace", WhitespaceTokenizer::default());
-    register_tokenizer_with_tracking(
-        "raw",
-        TextAnalyzer::builder(SimpleTokenizer::default()).build(),
-    );
+    register_tokenizer_with_tracking("raw", RawTokenizer::default());
 
     // Register language-specific stemming tokenizers
     let languages = ["en", "fr", "de", "es", "it", "pt", "ru"];
