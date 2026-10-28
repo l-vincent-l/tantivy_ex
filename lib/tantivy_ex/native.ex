@@ -158,6 +158,17 @@ defmodule TantivyEx.Native do
       ),
       do: :erlang.nif_error(:nif_not_loaded)
 
+  def register_text_analyzer_with_folding(
+        _name,
+        _base_tokenizer,
+        _lowercase,
+        _stop_words_language,
+        _stemming_language,
+        _remove_long_threshold,
+        _ascii_folding
+      ),
+      do: :erlang.nif_error(:nif_not_loaded)
+
   def list_tokenizers(), do: :erlang.nif_error(:nif_not_loaded)
   def tokenize_text(_tokenizer_name, _text), do: :erlang.nif_error(:nif_not_loaded)
   def tokenize_text_detailed(_tokenizer_name, _text), do: :erlang.nif_error(:nif_not_loaded)

@@ -4,6 +4,17 @@ use std::sync::{Arc, Mutex};
 use tantivy::{directory::MmapDirectory, Index};
 
 use crate::modules::resources::{IndexResource, IndexWriterResource, SchemaResource};
+use crate::modules::tokenizer::global_tokenizer_manager;
+
+/// Wraps `index` in its resource, with the registered tokenizers (see
+/// `TantivyEx.Tokenizer`), which its text fields can then use. Tantivy would
+/// otherwise give it only its built-in ones ("default", "raw", "en_stem"...).
+fn index_resource(mut index: Index) -> ResourceArc<IndexResource> {
+    index.set_tokenizers(global_tokenizer_manager());
+    ResourceArc::new(IndexResource {
+        index: Arc::new(index),
+    })
+}
 
 /// Index creation and management functions
 #[rustler::nif(schedule = "DirtyIo")]
@@ -24,9 +35,7 @@ pub fn index_create_in_dir(
     }
 
     match Index::create_in_dir(index_path, schema_res.schema.clone()) {
-        Ok(index) => Ok(ResourceArc::new(IndexResource {
-            index: Arc::new(index),
-        })),
+        Ok(index) => Ok(index_resource(index)),
         Err(e) => Err(rustler::Error::Term(Box::new(format!(
             "Failed to create index: {}",
             e
@@ -39,9 +48,7 @@ pub fn index_create_in_ram(
     schema_res: ResourceArc<SchemaResource>,
 ) -> NifResult<ResourceArc<IndexResource>> {
     let index = Index::create_in_ram(schema_res.schema.clone());
-    Ok(ResourceArc::new(IndexResource {
-        index: Arc::new(index),
-    }))
+    Ok(index_resource(index))
 }
 
 #[rustler::nif]
@@ -85,9 +92,7 @@ pub fn index_open_in_dir(path: String) -> NifResult<ResourceArc<IndexResource>> 
     let index_path = Path::new(&path);
 
     match Index::open_in_dir(index_path) {
-        Ok(index) => Ok(ResourceArc::new(IndexResource {
-            index: Arc::new(index),
-        })),
+        Ok(index) => Ok(index_resource(index)),
         Err(e) => Err(rustler::Error::Term(Box::new(format!(
             "Failed to open index: {}",
             e
@@ -115,9 +120,7 @@ pub fn index_open_or_create_in_dir(
     // Create MmapDirectory from path
     match MmapDirectory::open(index_path) {
         Ok(directory) => match Index::open_or_create(directory, schema_res.schema.clone()) {
-            Ok(index) => Ok(ResourceArc::new(IndexResource {
-                index: Arc::new(index),
-            })),
+            Ok(index) => Ok(index_resource(index)),
             Err(e) => Err(rustler::Error::Term(Box::new(format!(
                 "Failed to open or create index: {}",
                 e

@@ -3,9 +3,9 @@ use rustler::{NifResult, ResourceArc};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use tantivy::tokenizer::{
-    Language, LowerCaser, NgramTokenizer, PreTokenizedString, RegexTokenizer, RemoveLongFilter,
-    SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer, Token, TokenizerManager,
-    WhitespaceTokenizer,
+    AsciiFoldingFilter, Language, LowerCaser, NgramTokenizer, PreTokenizedString, RawTokenizer,
+    RegexTokenizer, RemoveLongFilter, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer,
+    Token, TokenizerManager, WhitespaceTokenizer,
 };
 
 use crate::modules::resources::TokenizerManagerResource;
@@ -110,276 +110,74 @@ pub fn register_text_analyzer(
     stemming_language: Option<String>,
     remove_long_threshold: Option<usize>,
 ) -> NifResult<String> {
-    // Validate languages early before building the tokenizer
-    if let Some(stop_lang) = stop_words_language.as_deref() {
-        if parse_language(stop_lang).is_none() {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Unsupported stop words language: {}",
-                stop_lang
-            ))));
-        }
-    }
+    build_and_register_text_analyzer(
+        name,
+        base_tokenizer,
+        lowercase,
+        stop_words_language,
+        stemming_language,
+        remove_long_threshold,
+        false,
+    )
+}
 
-    if let Some(stem_lang) = stemming_language.as_deref() {
-        if parse_language(stem_lang).is_none() {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Unsupported stemming language: {}",
-                stem_lang
-            ))));
-        }
-    }
+/// `register_text_analyzer`, with ASCII folding if `ascii_folding`.
+#[rustler::nif]
+pub fn register_text_analyzer_with_folding(
+    name: String,
+    base_tokenizer: String,
+    lowercase: bool,
+    stop_words_language: Option<String>,
+    stemming_language: Option<String>,
+    remove_long_threshold: Option<usize>,
+    ascii_folding: bool,
+) -> NifResult<String> {
+    build_and_register_text_analyzer(
+        name,
+        base_tokenizer,
+        lowercase,
+        stop_words_language,
+        stemming_language,
+        remove_long_threshold,
+        ascii_folding,
+    )
+}
 
-    let tokenizer = match base_tokenizer.as_str() {
-        "simple" => {
-            let base = SimpleTokenizer::default();
-            if lowercase {
-                if let Some(stop_lang) = stop_words_language.as_deref() {
-                    let stop_language = parse_language(stop_lang).ok_or_else(|| {
-                        rustler::Error::Term(Box::new(format!(
-                            "Unsupported stop words language: {}",
-                            stop_lang
-                        )))
-                    })?;
+/// The filters apply in this order: lowercasing, stop words, stemming, ASCII
+/// folding (after stemming, which relies on the accents), long word removal.
+fn build_and_register_text_analyzer(
+    name: String,
+    base_tokenizer: String,
+    lowercase: bool,
+    stop_words_language: Option<String>,
+    stemming_language: Option<String>,
+    remove_long_threshold: Option<usize>,
+    ascii_folding: bool,
+) -> NifResult<String> {
+    let stop_words = match stop_words_language.as_deref() {
+        Some(lang) => Some(
+            parse_language(lang)
+                .and_then(StopWordFilter::new)
+                .ok_or_else(|| {
+                    rustler::Error::Term(Box::new(format!(
+                        "Unsupported stop words language: {}",
+                        lang
+                    )))
+                })?,
+        ),
+        None => None,
+    };
 
-                    if let Some(stem_lang) = stemming_language.as_deref() {
-                        let stem_language = parse_language(stem_lang).ok_or_else(|| {
-                            rustler::Error::Term(Box::new(format!(
-                                "Unsupported stemming language: {}",
-                                stem_lang
-                            )))
-                        })?;
+    let stemmer = match stemming_language.as_deref() {
+        Some(lang) => Some(Stemmer::new(parse_language(lang).ok_or_else(|| {
+            rustler::Error::Term(Box::new(format!("Unsupported stemming language: {}", lang)))
+        })?)),
+        None => None,
+    };
 
-                        let builder = TextAnalyzer::builder(base)
-                            .filter(LowerCaser)
-                            .filter(StopWordFilter::new(stop_language).unwrap())
-                            .filter(Stemmer::new(stem_language));
-
-                        if let Some(threshold) = remove_long_threshold {
-                            builder.filter(RemoveLongFilter::limit(threshold)).build()
-                        } else {
-                            builder.build()
-                        }
-                    } else {
-                        let builder = TextAnalyzer::builder(base)
-                            .filter(LowerCaser)
-                            .filter(StopWordFilter::new(stop_language).unwrap());
-
-                        if let Some(threshold) = remove_long_threshold {
-                            builder.filter(RemoveLongFilter::limit(threshold)).build()
-                        } else {
-                            builder.build()
-                        }
-                    }
-                } else if let Some(stem_lang) = stemming_language.as_deref() {
-                    let stem_language = parse_language(stem_lang).ok_or_else(|| {
-                        rustler::Error::Term(Box::new(format!(
-                            "Unsupported stemming language: {}",
-                            stem_lang
-                        )))
-                    })?;
-
-                    let builder = TextAnalyzer::builder(base)
-                        .filter(LowerCaser)
-                        .filter(Stemmer::new(stem_language));
-
-                    if let Some(threshold) = remove_long_threshold {
-                        builder.filter(RemoveLongFilter::limit(threshold)).build()
-                    } else {
-                        builder.build()
-                    }
-                } else {
-                    let builder = TextAnalyzer::builder(base).filter(LowerCaser);
-                    if let Some(threshold) = remove_long_threshold {
-                        builder.filter(RemoveLongFilter::limit(threshold)).build()
-                    } else {
-                        builder.build()
-                    }
-                }
-            } else {
-                if let Some(stop_lang) = stop_words_language.as_deref() {
-                    let stop_language = parse_language(stop_lang).ok_or_else(|| {
-                        rustler::Error::Term(Box::new(format!(
-                            "Unsupported stop words language: {}",
-                            stop_lang
-                        )))
-                    })?;
-
-                    if let Some(stem_lang) = stemming_language.as_deref() {
-                        let stem_language = parse_language(stem_lang).ok_or_else(|| {
-                            rustler::Error::Term(Box::new(format!(
-                                "Unsupported stemming language: {}",
-                                stem_lang
-                            )))
-                        })?;
-
-                        let builder = TextAnalyzer::builder(base)
-                            .filter(StopWordFilter::new(stop_language).unwrap())
-                            .filter(Stemmer::new(stem_language));
-
-                        if let Some(threshold) = remove_long_threshold {
-                            builder.filter(RemoveLongFilter::limit(threshold)).build()
-                        } else {
-                            builder.build()
-                        }
-                    } else {
-                        let builder = TextAnalyzer::builder(base)
-                            .filter(StopWordFilter::new(stop_language).unwrap());
-
-                        if let Some(threshold) = remove_long_threshold {
-                            builder.filter(RemoveLongFilter::limit(threshold)).build()
-                        } else {
-                            builder.build()
-                        }
-                    }
-                } else if let Some(stem_lang) = stemming_language.as_deref() {
-                    let stem_language = parse_language(stem_lang).ok_or_else(|| {
-                        rustler::Error::Term(Box::new(format!(
-                            "Unsupported stemming language: {}",
-                            stem_lang
-                        )))
-                    })?;
-
-                    let builder = TextAnalyzer::builder(base).filter(Stemmer::new(stem_language));
-                    if let Some(threshold) = remove_long_threshold {
-                        builder.filter(RemoveLongFilter::limit(threshold)).build()
-                    } else {
-                        builder.build()
-                    }
-                } else {
-                    let builder = TextAnalyzer::builder(base);
-                    if let Some(threshold) = remove_long_threshold {
-                        builder.filter(RemoveLongFilter::limit(threshold)).build()
-                    } else {
-                        builder.build()
-                    }
-                }
-            }
-        }
-        "whitespace" => {
-            let base = WhitespaceTokenizer::default();
-            if lowercase {
-                if let Some(stop_lang) = stop_words_language.as_deref() {
-                    let stop_language = parse_language(stop_lang).ok_or_else(|| {
-                        rustler::Error::Term(Box::new(format!(
-                            "Unsupported stop words language: {}",
-                            stop_lang
-                        )))
-                    })?;
-
-                    if let Some(stem_lang) = stemming_language.as_deref() {
-                        let stem_language = parse_language(stem_lang).ok_or_else(|| {
-                            rustler::Error::Term(Box::new(format!(
-                                "Unsupported stemming language: {}",
-                                stem_lang
-                            )))
-                        })?;
-
-                        let builder = TextAnalyzer::builder(base)
-                            .filter(LowerCaser)
-                            .filter(StopWordFilter::new(stop_language).unwrap())
-                            .filter(Stemmer::new(stem_language));
-
-                        if let Some(threshold) = remove_long_threshold {
-                            builder.filter(RemoveLongFilter::limit(threshold)).build()
-                        } else {
-                            builder.build()
-                        }
-                    } else {
-                        let builder = TextAnalyzer::builder(base)
-                            .filter(LowerCaser)
-                            .filter(StopWordFilter::new(stop_language).unwrap());
-
-                        if let Some(threshold) = remove_long_threshold {
-                            builder.filter(RemoveLongFilter::limit(threshold)).build()
-                        } else {
-                            builder.build()
-                        }
-                    }
-                } else if let Some(stem_lang) = stemming_language.as_deref() {
-                    let stem_language = parse_language(stem_lang).ok_or_else(|| {
-                        rustler::Error::Term(Box::new(format!(
-                            "Unsupported stemming language: {}",
-                            stem_lang
-                        )))
-                    })?;
-
-                    let builder = TextAnalyzer::builder(base)
-                        .filter(LowerCaser)
-                        .filter(Stemmer::new(stem_language));
-
-                    if let Some(threshold) = remove_long_threshold {
-                        builder.filter(RemoveLongFilter::limit(threshold)).build()
-                    } else {
-                        builder.build()
-                    }
-                } else {
-                    let builder = TextAnalyzer::builder(base).filter(LowerCaser);
-                    if let Some(threshold) = remove_long_threshold {
-                        builder.filter(RemoveLongFilter::limit(threshold)).build()
-                    } else {
-                        builder.build()
-                    }
-                }
-            } else {
-                if let Some(stop_lang) = stop_words_language.as_deref() {
-                    let stop_language = parse_language(stop_lang).ok_or_else(|| {
-                        rustler::Error::Term(Box::new(format!(
-                            "Unsupported stop words language: {}",
-                            stop_lang
-                        )))
-                    })?;
-
-                    if let Some(stem_lang) = stemming_language.as_deref() {
-                        let stem_language = parse_language(stem_lang).ok_or_else(|| {
-                            rustler::Error::Term(Box::new(format!(
-                                "Unsupported stemming language: {}",
-                                stem_lang
-                            )))
-                        })?;
-
-                        let builder = TextAnalyzer::builder(base)
-                            .filter(StopWordFilter::new(stop_language).unwrap())
-                            .filter(Stemmer::new(stem_language));
-
-                        if let Some(threshold) = remove_long_threshold {
-                            builder.filter(RemoveLongFilter::limit(threshold)).build()
-                        } else {
-                            builder.build()
-                        }
-                    } else {
-                        let builder = TextAnalyzer::builder(base)
-                            .filter(StopWordFilter::new(stop_language).unwrap());
-
-                        if let Some(threshold) = remove_long_threshold {
-                            builder.filter(RemoveLongFilter::limit(threshold)).build()
-                        } else {
-                            builder.build()
-                        }
-                    }
-                } else if let Some(stem_lang) = stemming_language.as_deref() {
-                    let stem_language = parse_language(stem_lang).ok_or_else(|| {
-                        rustler::Error::Term(Box::new(format!(
-                            "Unsupported stemming language: {}",
-                            stem_lang
-                        )))
-                    })?;
-
-                    let builder = TextAnalyzer::builder(base).filter(Stemmer::new(stem_language));
-                    if let Some(threshold) = remove_long_threshold {
-                        builder.filter(RemoveLongFilter::limit(threshold)).build()
-                    } else {
-                        builder.build()
-                    }
-                } else {
-                    let builder = TextAnalyzer::builder(base);
-                    if let Some(threshold) = remove_long_threshold {
-                        builder.filter(RemoveLongFilter::limit(threshold)).build()
-                    } else {
-                        builder.build()
-                    }
-                }
-            }
-        }
+    let mut builder = match base_tokenizer.as_str() {
+        "simple" => TextAnalyzer::builder(SimpleTokenizer::default()).dynamic(),
+        "whitespace" => TextAnalyzer::builder(WhitespaceTokenizer::default()).dynamic(),
         _ => {
             return Err(rustler::Error::Term(Box::new(format!(
                 "Unsupported base tokenizer: {}. Use 'simple' or 'whitespace'",
@@ -388,8 +186,31 @@ pub fn register_text_analyzer(
         }
     };
 
-    register_tokenizer_with_tracking(&name, tokenizer);
+    if lowercase {
+        builder = builder.filter_dynamic(LowerCaser);
+    }
+    if let Some(filter) = stop_words {
+        builder = builder.filter_dynamic(filter);
+    }
+    if let Some(filter) = stemmer {
+        builder = builder.filter_dynamic(filter);
+    }
+    if ascii_folding {
+        builder = builder.filter_dynamic(AsciiFoldingFilter);
+    }
+    if let Some(threshold) = remove_long_threshold {
+        builder = builder.filter_dynamic(RemoveLongFilter::limit(threshold));
+    }
+
+    register_tokenizer_with_tracking(&name, builder.build());
     Ok(format!("Text analyzer '{}' registered successfully", name))
+}
+
+/// The tokenizer manager holding the registered tokenizers, given to the
+/// indexes so that their fields can use them. A clone shares the tokenizers:
+/// one registered later is seen by the indexes already created.
+pub fn global_tokenizer_manager() -> TokenizerManager {
+    GLOBAL_TOKENIZER_MANAGER.lock().unwrap().clone()
 }
 
 /// Get list of registered tokenizers
@@ -482,15 +303,20 @@ pub fn process_pre_tokenized_text(tokens: Vec<String>) -> NifResult<String> {
 /// Register common tokenizers with sensible defaults
 #[rustler::nif(schedule = "DirtyCpu")]
 pub fn register_default_tokenizers() -> NifResult<String> {
-    // Register basic tokenizers
-    register_tokenizer_with_tracking("default", SimpleTokenizer::default());
+    // Register basic tokenizers. "default" and "raw" are Tantivy's own: the
+    // indexes get these tokenizers (see global_tokenizer_manager), so they must
+    // not change how the fields using them are indexed.
+    register_tokenizer_with_tracking(
+        "default",
+        TextAnalyzer::builder(SimpleTokenizer::default())
+            .filter(RemoveLongFilter::limit(40))
+            .filter(LowerCaser)
+            .build(),
+    );
     register_tokenizer_with_tracking("simple", SimpleTokenizer::default());
     register_tokenizer_with_tracking("keyword", SimpleTokenizer::default()); // Add keyword tokenizer expected by tests
     register_tokenizer_with_tracking("whitespace", WhitespaceTokenizer::default());
-    register_tokenizer_with_tracking(
-        "raw",
-        TextAnalyzer::builder(SimpleTokenizer::default()).build(),
-    );
+    register_tokenizer_with_tracking("raw", RawTokenizer::default());
 
     // Register language-specific stemming tokenizers
     let languages = ["en", "fr", "de", "es", "it", "pt", "ru"];

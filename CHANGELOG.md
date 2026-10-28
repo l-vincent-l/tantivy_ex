@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Snippets with Tantivy's `SnippetGenerator`** - `TantivyEx.Searcher.snippet/5` returns the fragment of a text that best matches a query, with the byte ranges of the matched terms. Terms are matched with the field's tokenizer, as in the search, and the text does not need to be stored in the index.
+- **ASCII folding in text analyzers** - `TantivyEx.Tokenizer.register_text_analyzer/7` takes an `ascii_folding` flag (default `false`): accented characters are folded to ASCII after stemming, so that "ecole" matches "école".
+
+### Fixed
+
+- **Indexes use the registered tokenizers** - The tokenizers registered with `TantivyEx.Tokenizer` were kept in a global manager that no index received: a field using one (e.g. `fr_stem`) could not be indexed. Indexes created or opened now get them. `register_default_tokenizers/0` registers Tantivy's own `default` (lowercased, long words removed) and `raw` (the whole text as one token), so that it does not change the fields using them.
 
 ## [0.4.0] - 2025-06-18
 
