@@ -3,9 +3,9 @@ use rustler::{NifResult, ResourceArc};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use tantivy::tokenizer::{
-    Language, LowerCaser, NgramTokenizer, PreTokenizedString, RawTokenizer, RegexTokenizer,
-    RemoveLongFilter, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer, Token,
-    TokenizerManager, WhitespaceTokenizer,
+    AsciiFoldingFilter, Language, LowerCaser, NgramTokenizer, PreTokenizedString, RawTokenizer,
+    RegexTokenizer, RemoveLongFilter, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer,
+    Token, TokenizerManager, WhitespaceTokenizer,
 };
 
 use crate::modules::resources::TokenizerManagerResource;
@@ -100,9 +100,7 @@ pub fn register_ngram_tokenizer(
     }
 }
 
-/// Register a tokenizer with filters and configurable long word threshold.
-/// The filters apply in this order: lowercasing, stop words, stemming, long
-/// word removal.
+/// Register a tokenizer with filters and configurable long word threshold
 #[rustler::nif]
 pub fn register_text_analyzer(
     name: String,
@@ -111,6 +109,50 @@ pub fn register_text_analyzer(
     stop_words_language: Option<String>,
     stemming_language: Option<String>,
     remove_long_threshold: Option<usize>,
+) -> NifResult<String> {
+    build_and_register_text_analyzer(
+        name,
+        base_tokenizer,
+        lowercase,
+        stop_words_language,
+        stemming_language,
+        remove_long_threshold,
+        false,
+    )
+}
+
+/// `register_text_analyzer`, with ASCII folding if `ascii_folding`.
+#[rustler::nif]
+pub fn register_text_analyzer_with_folding(
+    name: String,
+    base_tokenizer: String,
+    lowercase: bool,
+    stop_words_language: Option<String>,
+    stemming_language: Option<String>,
+    remove_long_threshold: Option<usize>,
+    ascii_folding: bool,
+) -> NifResult<String> {
+    build_and_register_text_analyzer(
+        name,
+        base_tokenizer,
+        lowercase,
+        stop_words_language,
+        stemming_language,
+        remove_long_threshold,
+        ascii_folding,
+    )
+}
+
+/// The filters apply in this order: lowercasing, stop words, stemming, ASCII
+/// folding (after stemming, which relies on the accents), long word removal.
+fn build_and_register_text_analyzer(
+    name: String,
+    base_tokenizer: String,
+    lowercase: bool,
+    stop_words_language: Option<String>,
+    stemming_language: Option<String>,
+    remove_long_threshold: Option<usize>,
+    ascii_folding: bool,
 ) -> NifResult<String> {
     let stop_words = match stop_words_language.as_deref() {
         Some(lang) => Some(
@@ -152,6 +194,9 @@ pub fn register_text_analyzer(
     }
     if let Some(filter) = stemmer {
         builder = builder.filter_dynamic(filter);
+    }
+    if ascii_folding {
+        builder = builder.filter_dynamic(AsciiFoldingFilter);
     }
     if let Some(threshold) = remove_long_threshold {
         builder = builder.filter_dynamic(RemoveLongFilter::limit(threshold));

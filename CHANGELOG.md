@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Snippets with Tantivy's `SnippetGenerator`** - `TantivyEx.Searcher.snippet/5` returns the fragment of a text that best matches a query, with the byte ranges of the matched terms. Terms are matched with the field's tokenizer, as in the search, and the text does not need to be stored in the index.
+- **ASCII folding in text analyzers** - `TantivyEx.Tokenizer.register_text_analyzer/7` takes an `ascii_folding` flag (default `false`): accented characters are folded to ASCII after stemming, so that "ecole" matches "école".
 
 ### Fixed
 

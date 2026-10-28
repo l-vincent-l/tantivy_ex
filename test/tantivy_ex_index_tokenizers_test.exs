@@ -7,7 +7,7 @@ defmodule TantivyEx.IndexTokenizersTest do
   @body "Les statuts de l'association. L'école ouvre à huit heures."
 
   setup_all do
-    {:ok, _} = Tokenizer.register_text_analyzer("fr_index_test", "simple", true, nil, "fr", 40)
+    {:ok, _} = Tokenizer.register_text_analyzer("fr_folded", "simple", true, nil, "fr", 40, true)
     :ok
   end
 
@@ -32,34 +32,36 @@ defmodule TantivyEx.IndexTokenizersTest do
     length(hits)
   end
 
-  test "an index uses a registered analyzer" do
-    index = index_with_tokenizer("fr_index_test")
+  test "an index uses a registered analyzer: stemming, accents ignored" do
+    index = index_with_tokenizer("fr_folded")
 
     assert hits(index, "statut") == 1
+    assert hits(index, "ecole") == 1
     assert hits(index, "Écoles") == 1
     assert hits(index, "vélo") == 0
   end
 
   test "the snippet marks the words found through the analyzer" do
-    index = index_with_tokenizer("fr_index_test")
+    index = index_with_tokenizer("fr_folded")
     {:ok, searcher} = Searcher.new(index)
     {:ok, parser} = Query.parser(index, ["body"])
-    {:ok, query} = Query.parse(parser, "statut")
+    {:ok, query} = Query.parse(parser, "statut ecole")
 
     {:ok, %{fragment: fragment, highlighted: highlighted}} =
       Searcher.snippet(searcher, query, "body", @body)
 
     assert for({start, stop} <- highlighted, do: binary_part(fragment, start, stop - start)) ==
-             ["statuts"]
+             ["statuts", "école"]
   end
 
   test "registering the default tokenizers keeps Tantivy's default and raw" do
     Tokenizer.register_default_tokenizers()
     index = index_with_tokenizer("default")
 
-    # lowercased, but not stemmed
+    # lowercased, but neither stemmed nor folded
     assert hits(index, "STATUTS") == 1
     assert hits(index, "statut") == 0
+    assert hits(index, "ecole") == 0
     assert Tokenizer.tokenize_text("raw", "Les statuts") == ["Les statuts"]
   end
 end

@@ -212,9 +212,11 @@ defmodule TantivyEx.Tokenizer do
   - `stop_words_language`: Language for stop words filter (nil to disable)
   - `stemming_language`: Language for stemming filter (nil to disable)
   - `remove_long_threshold`: Custom threshold for long word removal (nil to disable, integer for custom threshold)
+  - `ascii_folding`: Whether to fold accented characters to ASCII ("école" matches
+    "ecole"), after stemming, which relies on the accents (default `false`)
 
-  The filters apply in this order: lowercasing, stop words, stemming, long word
-  removal.
+  The filters apply in this order: lowercasing, stop words, stemming, ASCII
+  folding, long word removal.
 
   The indexes created or opened afterwards get the registered analyzers: a text
   field can use one by its name (see `TantivyEx.Schema.add_text_field_with_tokenizer/4`).
@@ -264,6 +266,18 @@ defmodule TantivyEx.Tokenizer do
       ...>   nil
       ...> )
       {:ok, "Text analyzer 'fr_stop' registered successfully"}
+
+      # French analyzer with stemming, ignoring accents
+      iex> TantivyEx.Tokenizer.register_text_analyzer(
+      ...>   "fr_folded",
+      ...>   "simple",
+      ...>   true,
+      ...>   nil,
+      ...>   "fr",
+      ...>   40,
+      ...>   true
+      ...> )
+      {:ok, "Text analyzer 'fr_folded' registered successfully"}
   """
   @spec register_text_analyzer(
           tokenizer_name(),
@@ -271,7 +285,8 @@ defmodule TantivyEx.Tokenizer do
           boolean(),
           String.t() | nil,
           String.t() | nil,
-          pos_integer() | nil
+          pos_integer() | nil,
+          boolean()
         ) :: tokenizer_result()
   def register_text_analyzer(
         name,
@@ -279,17 +294,20 @@ defmodule TantivyEx.Tokenizer do
         lowercase,
         stop_words_language,
         stemming_language,
-        remove_long_threshold
+        remove_long_threshold,
+        ascii_folding \\ false
       )
       when is_binary(name) and is_binary(base_tokenizer) and is_boolean(lowercase) and
-             (is_nil(remove_long_threshold) or is_integer(remove_long_threshold)) do
-    case Native.register_text_analyzer(
+             (is_nil(remove_long_threshold) or is_integer(remove_long_threshold)) and
+             is_boolean(ascii_folding) do
+    case Native.register_text_analyzer_with_folding(
            name,
            base_tokenizer,
            lowercase,
            stop_words_language,
            stemming_language,
-           remove_long_threshold
+           remove_long_threshold,
+           ascii_folding
          ) do
       {:ok, result} -> {:ok, result}
       result when is_binary(result) -> {:ok, result}
