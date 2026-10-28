@@ -23,7 +23,7 @@ pub fn searcher_search<'a>(
     // For string queries, we'll use AllQuery for now (matches all documents)
     // In the future, this could be enhanced to parse the string
     let query = AllQuery;
-    let top_docs = TopDocs::with_limit(limit);
+    let top_docs = TopDocs::with_limit(limit).order_by_score();
 
     match searcher_res.searcher.search(&query, &top_docs) {
         Ok(docs) => {
@@ -132,7 +132,7 @@ pub fn searcher_search_with_query(
     limit: u64,
     include_docs: bool,
 ) -> NifResult<String> {
-    let top_docs = TopDocs::with_limit(limit as usize);
+    let top_docs = TopDocs::with_limit(limit as usize).order_by_score();
     match searcher_res.searcher.search(&*query_res.query, &top_docs) {
         Ok(docs) => {
             let mut results = Vec::new();

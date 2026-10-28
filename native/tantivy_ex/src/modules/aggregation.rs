@@ -11,9 +11,10 @@ use tantivy::aggregation::metric::{
     AverageAggregation, CountAggregation, MaxAggregation, MinAggregation, PercentileValues,
     PercentilesAggregationReq, StatsAggregation, SumAggregation,
 };
-use tantivy::aggregation::{AggregationCollector, AggregationLimitsGuard, Key};
+use tantivy::aggregation::{AggContextParams, AggregationCollector, AggregationLimitsGuard, Key};
 use tantivy::schema::OwnedValue;
 use tantivy::schema::Schema;
+use tantivy::Searcher;
 
 use crate::modules::resources::{QueryResource, SearcherResource};
 
@@ -76,11 +77,10 @@ pub fn run_aggregations<'a>(
             Err(e) => return Ok(format!("Error building aggregations: {}", e).encode(env)),
         };
 
-    let limits = AggregationLimitsGuard::new(
-        Some(500_000_000), // 500MB default memory limit
-        Some(65535),       // Default bucket limit
+    let collector = AggregationCollector::from_aggs(
+        tantivy_aggregations,
+        agg_context_params(&searcher_res.searcher),
     );
-    let collector = AggregationCollector::from_aggs(tantivy_aggregations, limits);
 
     match searcher_res.searcher.search(&query_res.query, &collector) {
         Ok(agg_result) => {
@@ -116,12 +116,11 @@ pub fn run_search_with_aggregations<'a>(
             Err(e) => return Ok(format!("Error building aggregations: {}", e).encode(env)),
         };
 
-    let limits = AggregationLimitsGuard::new(
-        Some(500_000_000), // 500MB default memory limit
-        Some(65535),       // Default bucket limit
+    let agg_collector = AggregationCollector::from_aggs(
+        tantivy_aggregations,
+        agg_context_params(&searcher_res.searcher),
     );
-    let agg_collector = AggregationCollector::from_aggs(tantivy_aggregations, limits);
-    let top_docs_collector = TopDocs::with_limit(search_limit);
+    let top_docs_collector = TopDocs::with_limit(search_limit).order_by_score();
 
     let mut multi_collector = MultiCollector::new();
     let agg_handle = multi_collector.add_collector(agg_collector);
@@ -326,18 +325,28 @@ fn parse_aggregation_options(config: &JsonValue) -> Result<AggregationOptions, S
     Ok(options)
 }
 
+/// The aggregations' limits, and the tokenizers of the searched index, used by
+/// the aggregations parsing a query string.
+fn agg_context_params(searcher: &Searcher) -> AggContextParams {
+    let limits = AggregationLimitsGuard::new(
+        Some(500_000_000), // 500MB default memory limit
+        Some(65535),       // Default bucket limit
+    );
+    AggContextParams::new(limits, searcher.index().tokenizers().clone())
+}
+
 fn build_tantivy_aggregations(
     requests: &HashMap<String, AggregationRequest>,
     schema: &Schema,
 ) -> Result<Aggregations, String> {
-    let mut aggregations = HashMap::new();
+    let mut aggregations = Aggregations::default();
 
     for (name, request) in requests {
         let tantivy_agg = build_single_tantivy_aggregation(request, schema)?;
         aggregations.insert(name.clone(), tantivy_agg);
     }
 
-    Ok(Aggregations::from(aggregations))
+    Ok(aggregations)
 }
 
 fn build_single_tantivy_aggregation(
@@ -361,6 +370,8 @@ fn build_single_tantivy_aggregation(
                 order: None,
                 missing: None, // Convert to Key if needed
                 show_term_doc_count_error: Some(false),
+                include: None,
+                exclude: None,
             };
             AggregationVariants::Terms(terms_agg)
         }
@@ -472,14 +483,14 @@ fn build_sub_aggregations(
     sub_requests: &HashMap<String, AggregationRequest>,
     schema: &Schema,
 ) -> Result<Aggregations, String> {
-    let mut sub_aggregations = HashMap::new();
+    let mut sub_aggregations = Aggregations::default();
 
     for (name, request) in sub_requests {
         let tantivy_agg = build_single_tantivy_aggregation(request, schema)?;
         sub_aggregations.insert(name.clone(), tantivy_agg);
     }
 
-    Ok(Aggregations::from(sub_aggregations))
+    Ok(sub_aggregations)
 }
 
 fn convert_aggregation_result_to_json(
@@ -615,6 +626,11 @@ fn convert_bucket_result_to_json(
                 .collect();
 
             json!({ "buckets": buckets_json })
+        }
+        // Not built from the requests (see build_single_tantivy_aggregation):
+        // Tantivy's own serialization
+        BucketResult::Filter(_) | BucketResult::Composite { .. } => {
+            serde_json::to_value(result).unwrap_or(JsonValue::Null)
         }
     }
 }
