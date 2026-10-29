@@ -51,8 +51,8 @@ defmodule TantivyEx.Facet do
   @spec collector_for_field(String.t()) :: {:ok, reference()} | {:error, String.t()}
   def collector_for_field(field_name) when is_binary(field_name) do
     case Native.facet_collector_for_field(field_name) do
-      {:ok, collector_ref} -> {:ok, collector_ref}
       {:error, reason} -> {:error, reason}
+      collector_ref -> {:ok, collector_ref}
     end
   rescue
     e -> {:error, "Failed to create facet collector: #{inspect(e)}"}
@@ -103,7 +103,7 @@ defmodule TantivyEx.Facet do
   def search(searcher_ref, query_ref, collector_ref)
       when is_reference(searcher_ref) and is_reference(query_ref) and is_reference(collector_ref) do
     case Native.facet_search(searcher_ref, query_ref, collector_ref) do
-      {:ok, results_json} when is_binary(results_json) ->
+      results_json when is_binary(results_json) ->
         case Jason.decode(results_json) do
           {:ok, results} -> {:ok, results}
           {:error, _} -> {:error, "Failed to parse facet results"}
@@ -189,12 +189,13 @@ defmodule TantivyEx.Facet do
       {:ok, facet_query} = TantivyEx.Facet.facet_term_query(schema, "category", "/electronics/laptops")
       {:ok, results} = TantivyEx.Searcher.search(searcher, facet_query, 100, true)
   """
-  @spec facet_term_query(reference(), String.t(), String.t()) :: {:ok, reference()} | {:error, String.t()}
+  @spec facet_term_query(reference(), String.t(), String.t()) ::
+          {:ok, reference()} | {:error, String.t()}
   def facet_term_query(schema, field_name, facet_path)
       when is_binary(field_name) and is_binary(facet_path) do
     case Native.facet_term_query(schema, field_name, facet_path) do
-      {:ok, query_ref} -> {:ok, query_ref}
       {:error, reason} -> {:error, reason}
+      query_ref -> {:ok, query_ref}
     end
   rescue
     e -> {:error, "Failed to create facet term query: #{inspect(e)}"}
@@ -229,8 +230,8 @@ defmodule TantivyEx.Facet do
       end
 
     case Native.facet_multi_query(field_name, facet_paths, occur_str) do
-      {:ok, query_ref} -> {:ok, query_ref}
       {:error, reason} -> {:error, reason}
+      query_ref -> {:ok, query_ref}
     end
   rescue
     e -> {:error, "Failed to create multi-facet query: #{inspect(e)}"}
@@ -290,8 +291,8 @@ defmodule TantivyEx.Facet do
   @spec from_text(String.t()) :: {:ok, reference()} | {:error, String.t()}
   def from_text(facet_path) when is_binary(facet_path) do
     case Native.facet_from_text(facet_path) do
-      {:ok, facet_ref} -> {:ok, facet_ref}
       {:error, reason} -> {:error, reason}
+      facet_ref -> {:ok, facet_ref}
     end
   rescue
     e -> {:error, "Failed to create facet from text: #{inspect(e)}"}
@@ -313,8 +314,8 @@ defmodule TantivyEx.Facet do
   @spec to_string(reference()) :: {:ok, String.t()} | {:error, String.t()}
   def to_string(facet_ref) when is_reference(facet_ref) do
     case Native.facet_to_string(facet_ref) do
-      {:ok, facet_string} -> {:ok, facet_string}
       {:error, reason} -> {:error, reason}
+      facet_string -> {:ok, facet_string}
     end
   rescue
     e -> {:error, "Failed to convert facet to string: #{inspect(e)}"}

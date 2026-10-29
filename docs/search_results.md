@@ -20,29 +20,27 @@ This comprehensive guide covers search result processing, formatting, and optimi
 
 ### What are Search Results?
 
-Search results in TantivyEx represent documents that match your query, along with metadata like relevance scores, document IDs, and optionally highlighted text snippets. Results are returned as structured data that can be processed, formatted, and enhanced for your application's needs.
+Search results in TantivyEx represent documents that match your query, along with their relevance scores, and optionally highlighted text snippets. Results are returned as structured data that can be processed, formatted, and enhanced for your application's needs.
 
 ```elixir
 # Basic search result structure
 %{
-  score: 1.2345,           # Relevance score
-  doc_id: 42,              # Internal document ID
-  document: %{             # Document fields
-    "title" => "Sample Document",
-    "content" => "Document content...",
-    "author" => "John Doe",
-    "published_at" => "2024-01-15T10:30:00Z"
-  }
+  "score" => 1.2345,                        # Relevance score
+  "title" => "Sample Document",             # Stored fields, by name
+  "content" => "Document content...",
+  "tags" => ["elixir", "search"],           # A field with several values
+  "published_at" => "2024-01-15T10:30:00Z"
 }
 ```
+
+To identify a document, store an identifier of your own (an `"id"` field) and read it from the results.
 
 ### Result Components
 
 Each search result contains:
 
 - **Score**: Numerical relevance score (higher = more relevant)
-- **Document ID**: Internal Tantivy document identifier
-- **Document Fields**: Actual field values from the indexed document
+- **Document Fields**: The stored field values of the indexed document: a field with several values gives a list of them
 - **Optional Metadata**: Highlighting, snippets, and computed fields
 
 ## Basic Result Processing
@@ -143,7 +141,6 @@ defmodule MyApp.SearchResult do
   defstruct [
     :score,
     :normalized_score,
-    :doc_id,
     :title,
     :content,
     :author,

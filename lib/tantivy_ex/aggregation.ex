@@ -205,7 +205,7 @@ defmodule TantivyEx.Aggregation do
         "hits" => %{
           "total" => 150,
           "hits" => [
-            %{"score" => 1.5, "doc_id" => 1, "title" => "Product 1", ...},
+            %{"score" => 1.5, "title" => "Product 1", ...},
             ...
           ]
         },

@@ -1,235 +1,160 @@
 use base64::{engine::general_purpose, Engine as _};
 use rustler::{Encoder, Env, NifResult, ResourceArc, Term};
-use serde_json;
 use tantivy::collector::TopDocs;
-use tantivy::schema::Value;
+use tantivy::query::{Query, QueryParser};
+use tantivy::schema::{FieldType, Value};
 use tantivy::snippet::SnippetGenerator;
-use tantivy::TantivyDocument;
+use tantivy::{Searcher, TantivyDocument};
 
 use crate::modules::resources::{QueryResource, SearcherResource};
 
 /// Search and retrieval functions
 
+/// Searches with a query string, parsed with the index's tokenizers. The
+/// default fields are the fields searched by terms without a field; when
+/// empty, they are all the indexed text fields.
 #[rustler::nif(schedule = "DirtyCpu")]
 pub fn searcher_search<'a>(
     env: Env<'a>,
     searcher_res: ResourceArc<SearcherResource>,
-    _query_str: String,
+    query_str: String,
+    default_fields: Vec<String>,
     limit: usize,
     include_docs: bool,
 ) -> NifResult<Term<'a>> {
-    use tantivy::query::AllQuery;
+    let searcher = &searcher_res.searcher;
+    let schema = searcher.schema();
 
-    // For string queries, we'll use AllQuery for now (matches all documents)
-    // In the future, this could be enhanced to parse the string
-    let query = AllQuery;
-    let top_docs = TopDocs::with_limit(limit).order_by_score();
+    let fields = if default_fields.is_empty() {
+        schema
+            .fields()
+            .filter(|(_, entry)| {
+                matches!(entry.field_type(), FieldType::Str(_)) && entry.is_indexed()
+            })
+            .map(|(field, _)| field)
+            .collect()
+    } else {
+        default_fields
+            .iter()
+            .map(|name| {
+                schema.get_field(name).map_err(|_| {
+                    rustler::Error::Term(Box::new(format!("Field not found: {}", name)))
+                })
+            })
+            .collect::<NifResult<Vec<_>>>()?
+    };
 
-    match searcher_res.searcher.search(&query, &top_docs) {
-        Ok(docs) => {
-            let mut results = Vec::new();
+    let query = QueryParser::for_index(searcher.index(), fields)
+        .parse_query(&query_str)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Failed to parse query: {}", e))))?;
 
-            for (score, doc_address) in docs {
-                if include_docs {
-                    if let Ok(doc) = searcher_res.searcher.doc::<TantivyDocument>(doc_address) {
-                        let mut doc_map = serde_json::Map::new();
-                        doc_map.insert(
-                            "score".to_string(),
-                            serde_json::Value::Number(
-                                serde_json::Number::from_f64(score as f64)
-                                    .unwrap_or(serde_json::Number::from(0)),
-                            ),
-                        );
-                        doc_map.insert(
-                            "doc_id".to_string(),
-                            serde_json::Value::Number(serde_json::Number::from(
-                                doc_address.doc_id as u64,
-                            )),
-                        );
-
-                        // Add document fields
-                        for (field, value) in doc.field_values() {
-                            let field_name = searcher_res.searcher.schema().get_field_name(field);
-                            let json_value = if let Some(s) = value.as_str() {
-                                serde_json::Value::String(s.to_string())
-                            } else if let Some(n) = value.as_u64() {
-                                serde_json::Value::Number(serde_json::Number::from(n))
-                            } else if let Some(n) = value.as_i64() {
-                                serde_json::Value::Number(serde_json::Number::from(n))
-                            } else if let Some(n) = value.as_f64() {
-                                serde_json::Value::Number(
-                                    serde_json::Number::from_f64(n)
-                                        .unwrap_or(serde_json::Number::from(0)),
-                                )
-                            } else if let Some(b) = value.as_bool() {
-                                serde_json::Value::Bool(b)
-                            } else if let Some(d) = value.as_datetime() {
-                                serde_json::Value::String(format!("{:?}", d))
-                            } else if let Some(f) = value.as_facet() {
-                                serde_json::Value::String(f.to_string())
-                            } else if let Some(b) = value.as_bytes() {
-                                serde_json::Value::String(general_purpose::STANDARD.encode(b))
-                            } else if let Some(obj_iter) = value.as_object() {
-                                // Convert object iterator to JSON value
-                                let mut json_obj = serde_json::Map::new();
-                                for (key, val) in obj_iter {
-                                    // For now, just convert to string - could be enhanced later
-                                    json_obj.insert(
-                                        key.to_string(),
-                                        serde_json::Value::String(format!("{:?}", val)),
-                                    );
-                                }
-                                serde_json::Value::Object(json_obj)
-                            } else if let Some(ip) = value.as_ip_addr() {
-                                serde_json::Value::String(ip.to_string())
-                            } else {
-                                serde_json::Value::Null
-                            };
-                            doc_map.insert(field_name.to_string(), json_value);
-                        }
-
-                        results.push(serde_json::Value::Object(doc_map));
-                    }
-                } else {
-                    // Just return score and doc_id
-                    let mut doc_map = serde_json::Map::new();
-                    doc_map.insert(
-                        "score".to_string(),
-                        serde_json::Value::Number(
-                            serde_json::Number::from_f64(score as f64)
-                                .unwrap_or(serde_json::Number::from(0)),
-                        ),
-                    );
-                    doc_map.insert(
-                        "doc_id".to_string(),
-                        serde_json::Value::Number(serde_json::Number::from(
-                            doc_address.doc_id as u64,
-                        )),
-                    );
-                    results.push(serde_json::Value::Object(doc_map));
-                }
-            }
-
-            match serde_json::to_string(&results) {
-                Ok(json) => Ok(json.encode(env)),
-                Err(e) => Err(rustler::Error::Term(Box::new(format!(
-                    "Failed to serialize results: {}",
-                    e
-                )))),
-            }
-        }
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Search failed: {}",
-            e
-        )))),
-    }
+    search_results(env, searcher, &*query, limit, include_docs)
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
-pub fn searcher_search_with_query(
+pub fn searcher_search_with_query<'a>(
+    env: Env<'a>,
     searcher_res: ResourceArc<SearcherResource>,
     query_res: ResourceArc<QueryResource>,
-    limit: u64,
+    limit: usize,
     include_docs: bool,
-) -> NifResult<String> {
-    let top_docs = TopDocs::with_limit(limit as usize).order_by_score();
-    match searcher_res.searcher.search(&*query_res.query, &top_docs) {
-        Ok(docs) => {
-            let mut results = Vec::new();
+) -> NifResult<Term<'a>> {
+    search_results(
+        env,
+        &searcher_res.searcher,
+        &*query_res.query,
+        limit,
+        include_docs,
+    )
+}
 
-            for (score, doc_address) in docs {
-                if include_docs {
-                    if let Ok(doc) = searcher_res.searcher.doc::<TantivyDocument>(doc_address) {
-                        let mut doc_map = serde_json::Map::new();
-                        doc_map.insert(
-                            "score".to_string(),
-                            serde_json::Value::Number(
-                                serde_json::Number::from_f64(score as f64)
-                                    .unwrap_or(serde_json::Number::from(0)),
-                            ),
-                        );
-                        doc_map.insert(
-                            "doc_id".to_string(),
-                            serde_json::Value::Number(serde_json::Number::from(
-                                doc_address.doc_id as u64,
-                            )),
-                        );
+/// The `limit` best matches of `query`, as maps with their `"score"` and,
+/// with `include_docs`, their stored fields. A field with several values
+/// gives a list, a field with one value gives that value.
+fn search_results<'a>(
+    env: Env<'a>,
+    searcher: &Searcher,
+    query: &dyn Query,
+    limit: usize,
+    include_docs: bool,
+) -> NifResult<Term<'a>> {
+    let top_docs = TopDocs::with_limit(limit).order_by_score();
+    let docs = searcher
+        .search(query, &top_docs)
+        .map_err(|e| rustler::Error::Term(Box::new(format!("Search failed: {}", e))))?;
 
-                        // Add document fields
-                        for (field, value) in doc.field_values() {
-                            let field_name = searcher_res.searcher.schema().get_field_name(field);
-                            let json_value = if let Some(s) = value.as_str() {
-                                serde_json::Value::String(s.to_string())
-                            } else if let Some(n) = value.as_u64() {
-                                serde_json::Value::Number(serde_json::Number::from(n))
-                            } else if let Some(n) = value.as_i64() {
-                                serde_json::Value::Number(serde_json::Number::from(n))
-                            } else if let Some(n) = value.as_f64() {
-                                serde_json::Value::Number(
-                                    serde_json::Number::from_f64(n)
-                                        .unwrap_or(serde_json::Number::from(0)),
-                                )
-                            } else if let Some(b) = value.as_bool() {
-                                serde_json::Value::Bool(b)
-                            } else if let Some(d) = value.as_datetime() {
-                                serde_json::Value::String(format!("{:?}", d))
-                            } else if let Some(f) = value.as_facet() {
-                                serde_json::Value::String(f.to_string())
-                            } else if let Some(b) = value.as_bytes() {
-                                serde_json::Value::String(general_purpose::STANDARD.encode(b))
-                            } else if let Some(obj_iter) = value.as_object() {
-                                // Convert object iterator to JSON value
-                                let mut json_obj = serde_json::Map::new();
-                                for (key, val) in obj_iter {
-                                    // For now, just convert to string - could be enhanced later
-                                    json_obj.insert(
-                                        key.to_string(),
-                                        serde_json::Value::String(format!("{:?}", val)),
-                                    );
-                                }
-                                serde_json::Value::Object(json_obj)
-                            } else if let Some(ip) = value.as_ip_addr() {
-                                serde_json::Value::String(ip.to_string())
-                            } else {
-                                serde_json::Value::Null
-                            };
-                            doc_map.insert(field_name.to_string(), json_value);
-                        }
+    let mut results = Vec::new();
 
-                        results.push(serde_json::Value::Object(doc_map));
-                    }
-                } else {
-                    // Just return score and doc_id
-                    let mut doc_map = serde_json::Map::new();
-                    doc_map.insert(
-                        "score".to_string(),
-                        serde_json::Value::Number(
-                            serde_json::Number::from_f64(score as f64)
-                                .unwrap_or(serde_json::Number::from(0)),
-                        ),
-                    );
-                    doc_map.insert(
-                        "doc_id".to_string(),
-                        serde_json::Value::Number(serde_json::Number::from(
-                            doc_address.doc_id as u64,
-                        )),
-                    );
-                    results.push(serde_json::Value::Object(doc_map));
+    for (score, doc_address) in docs {
+        let mut result = rustler::types::map::map_new(env)
+            .map_put("score".encode(env), (score as f64).encode(env))?;
+
+        if include_docs {
+            let doc = match searcher.doc::<TantivyDocument>(doc_address) {
+                Ok(doc) => doc,
+                Err(_) => continue,
+            };
+
+            // Values grouped by field, in the order of their first value
+            let mut fields: Vec<(&str, Vec<Term<'a>>)> = Vec::new();
+            for (field, value) in doc.field_values() {
+                let name = searcher.schema().get_field_name(field);
+                let value = encode_value(env, value);
+                match fields
+                    .iter_mut()
+                    .find(|(field_name, _)| *field_name == name)
+                {
+                    Some((_, values)) => values.push(value),
+                    None => fields.push((name, vec![value])),
                 }
             }
 
-            match serde_json::to_string(&results) {
-                Ok(json) => Ok(json),
-                Err(e) => Err(rustler::Error::Term(Box::new(format!(
-                    "Failed to serialize results: {}",
-                    e
-                )))),
+            for (name, mut values) in fields {
+                let value = if values.len() == 1 {
+                    values.pop().unwrap()
+                } else {
+                    values.encode(env)
+                };
+                result = result.map_put(name.encode(env), value)?;
             }
         }
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Search failed: {}",
-            e
-        )))),
+
+        results.push(result);
+    }
+
+    Ok(results.encode(env))
+}
+
+fn encode_value<'a, 'b, V: Value<'b>>(env: Env<'a>, value: V) -> Term<'a> {
+    if let Some(s) = value.as_str() {
+        s.encode(env)
+    } else if let Some(n) = value.as_u64() {
+        n.encode(env)
+    } else if let Some(n) = value.as_i64() {
+        n.encode(env)
+    } else if let Some(n) = value.as_f64() {
+        n.encode(env)
+    } else if let Some(b) = value.as_bool() {
+        b.encode(env)
+    } else if let Some(d) = value.as_datetime() {
+        format!("{:?}", d).encode(env)
+    } else if let Some(f) = value.as_facet() {
+        f.to_string().encode(env)
+    } else if let Some(b) = value.as_bytes() {
+        general_purpose::STANDARD.encode(b).encode(env)
+    } else if let Some(obj_iter) = value.as_object() {
+        // For now, values are converted to strings - could be enhanced later
+        let mut map = rustler::types::map::map_new(env);
+        for (key, val) in obj_iter {
+            if let Ok(updated) = map.map_put(key.encode(env), format!("{:?}", val).encode(env)) {
+                map = updated;
+            }
+        }
+        map
+    } else if let Some(ip) = value.as_ip_addr() {
+        ip.to_string().encode(env)
+    } else {
+        rustler::types::atom::nil().encode(env)
     }
 }
 

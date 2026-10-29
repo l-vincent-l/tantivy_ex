@@ -4,7 +4,7 @@ use rustler::{Encoder, Env, NifResult, ResourceArc, Term};
 use serde_json;
 use std::collections::HashMap;
 use tantivy::query::{BooleanQuery, Occur, PhraseQuery, TermQuery};
-use tantivy::schema::{Field, FieldType, IndexRecordOption};
+use tantivy::schema::{Field, FieldType, IndexRecordOption, Schema};
 use tantivy::{TantivyDocument, Term as TantivyTerm};
 
 use crate::modules::resources::{
@@ -20,115 +20,9 @@ pub fn writer_add_document<'a>(
     writer_res: ResourceArc<IndexWriterResource>,
     document: rustler::Term<'a>,
 ) -> NifResult<Term<'a>> {
-    // Convert Elixir map to a HashMap first
-    let doc_map: HashMap<String, rustler::Term> = match document.decode() {
-        Ok(map) => map,
-        Err(_) => {
-            return Err(rustler::Error::Term(Box::new(
-                "Failed to decode document map: Expected a map".to_string(),
-            )))
-        }
-    };
-
     let writer = writer_res.writer.lock().unwrap();
-    let schema = writer.index().schema();
-
-    // Create a properly mapped Tantivy document
-    let mut tantivy_doc = TantivyDocument::default();
-
-    // Map each field in the document to the correct Tantivy field
-    for (field_name, value) in doc_map {
-        // Find the field in the schema
-        if let Ok(field) = schema.get_field(&field_name) {
-            let field_entry = schema.get_field_entry(field);
-
-            match field_entry.field_type() {
-                FieldType::Str(_) => {
-                    if let Ok(string_val) = value.decode::<String>() {
-                        tantivy_doc.add_text(field, &string_val);
-                    }
-                }
-                FieldType::U64(_) => {
-                    if let Ok(int_val) = value.decode::<u64>() {
-                        tantivy_doc.add_u64(field, int_val);
-                    } else if let Ok(int_val) = value.decode::<i64>() {
-                        if int_val >= 0 {
-                            tantivy_doc.add_u64(field, int_val as u64);
-                        }
-                    }
-                }
-                FieldType::I64(_) => {
-                    if let Ok(int_val) = value.decode::<i64>() {
-                        tantivy_doc.add_i64(field, int_val);
-                    } else if let Ok(int_val) = value.decode::<u64>() {
-                        tantivy_doc.add_i64(field, int_val as i64);
-                    }
-                }
-                FieldType::F64(_) => {
-                    if let Ok(float_val) = value.decode::<f64>() {
-                        tantivy_doc.add_f64(field, float_val);
-                    } else if let Ok(int_val) = value.decode::<i64>() {
-                        tantivy_doc.add_f64(field, int_val as f64);
-                    } else if let Ok(int_val) = value.decode::<u64>() {
-                        tantivy_doc.add_f64(field, int_val as f64);
-                    }
-                }
-                FieldType::Bool(_) => {
-                    if let Ok(bool_val) = value.decode::<bool>() {
-                        tantivy_doc.add_bool(field, bool_val);
-                    }
-                }
-                FieldType::Date(_) => {
-                    if let Ok(timestamp) = value.decode::<i64>() {
-                        let date_time = tantivy::DateTime::from_timestamp_secs(timestamp);
-                        tantivy_doc.add_date(field, date_time);
-                    } else if let Ok(timestamp) = value.decode::<u64>() {
-                        let date_time = tantivy::DateTime::from_timestamp_secs(timestamp as i64);
-                        tantivy_doc.add_date(field, date_time);
-                    }
-                }
-                FieldType::Facet(_) => {
-                    // Handle both single strings and arrays of strings for facet fields
-                    if let Ok(facet_val) = value.decode::<String>() {
-                        if let Ok(facet) = tantivy::schema::Facet::from_text(&facet_val) {
-                            tantivy_doc.add_facet(field, facet);
-                        }
-                    } else if let Ok(facet_array) = value.decode::<Vec<rustler::Term>>() {
-                        // Handle arrays of facet values
-                        for facet_item in facet_array {
-                            if let Ok(facet_val) = facet_item.decode::<String>() {
-                                if let Ok(facet) = tantivy::schema::Facet::from_text(&facet_val) {
-                                    tantivy_doc.add_facet(field, facet);
-                                }
-                            }
-                        }
-                    }
-                }
-                FieldType::Bytes(_) => {
-                    if let Ok(bytes_val) = value.decode::<Vec<u8>>() {
-                        tantivy_doc.add_bytes(field, &bytes_val);
-                    } else if let Ok(string_val) = value.decode::<String>() {
-                        tantivy_doc.add_bytes(field, string_val.as_bytes());
-                    }
-                }
-                FieldType::JsonObject(_) => {
-                    if let Ok(json_str) = value.decode::<String>() {
-                        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&json_str) {
-                            let btree_map = convert_json_value_to_btreemap(json_val);
-                            tantivy_doc.add_object(field, btree_map);
-                        }
-                    }
-                }
-                FieldType::IpAddr(_) => {
-                    if let Ok(ip_str) = value.decode::<String>() {
-                        if let Ok(ip_addr) = ip_str.parse::<std::net::IpAddr>() {
-                            tantivy_doc.add_ip_addr(field, convert_ip_to_ipv6(ip_addr));
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let tantivy_doc = build_document(&writer.index().schema(), document)
+        .map_err(|e| rustler::Error::Term(Box::new(e)))?;
 
     match writer.add_document(tantivy_doc) {
         Ok(_) => Ok(atoms::ok().encode(env)),
@@ -460,117 +354,9 @@ pub fn writer_add_document_with_schema<'a>(
     document: rustler::Term<'a>,
     schema_res: ResourceArc<SchemaResource>,
 ) -> NifResult<Term<'a>> {
-    // Convert Elixir map to a HashMap first
-    let doc_map: HashMap<String, rustler::Term> = match document.decode() {
-        Ok(map) => map,
-        Err(_) => {
-            return Err(rustler::Error::Term(Box::new(
-                "Failed to decode document map: Expected a map".to_string(),
-            )))
-        }
-    };
-
-    let schema = &schema_res.schema;
+    let tantivy_doc = build_document(&schema_res.schema, document)
+        .map_err(|e| rustler::Error::Term(Box::new(e)))?;
     let writer = writer_res.writer.lock().unwrap();
-
-    // Create a properly mapped Tantivy document
-    let mut tantivy_doc = TantivyDocument::default();
-
-    // Map each field in the document to the correct Tantivy field
-    for (field_name, value) in doc_map {
-        // Find the field in the schema
-        if let Ok(field) = schema.get_field(&field_name) {
-            let field_entry = schema.get_field_entry(field);
-
-            match field_entry.field_type() {
-                FieldType::Str(_) => {
-                    if let Ok(string_val) = value.decode::<String>() {
-                        tantivy_doc.add_text(field, &string_val);
-                    }
-                }
-                FieldType::U64(_) => {
-                    if let Ok(int_val) = value.decode::<u64>() {
-                        tantivy_doc.add_u64(field, int_val);
-                    } else if let Ok(int_val) = value.decode::<i64>() {
-                        if int_val >= 0 {
-                            tantivy_doc.add_u64(field, int_val as u64);
-                        }
-                    }
-                }
-                FieldType::I64(_) => {
-                    if let Ok(int_val) = value.decode::<i64>() {
-                        tantivy_doc.add_i64(field, int_val);
-                    } else if let Ok(int_val) = value.decode::<u64>() {
-                        tantivy_doc.add_i64(field, int_val as i64);
-                    }
-                }
-                FieldType::F64(_) => {
-                    if let Ok(float_val) = value.decode::<f64>() {
-                        tantivy_doc.add_f64(field, float_val);
-                    } else if let Ok(int_val) = value.decode::<i64>() {
-                        tantivy_doc.add_f64(field, int_val as f64);
-                    }
-                }
-                FieldType::Bool(_) => {
-                    if let Ok(bool_val) = value.decode::<bool>() {
-                        tantivy_doc.add_bool(field, bool_val);
-                    }
-                }
-                FieldType::Date(_) => {
-                    if let Ok(timestamp) = value.decode::<i64>() {
-                        let datetime = tantivy::DateTime::from_timestamp_secs(timestamp);
-                        tantivy_doc.add_date(field, datetime);
-                    } else if let Ok(string_val) = value.decode::<String>() {
-                        // Try to parse ISO 8601 format
-                        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&string_val) {
-                            let timestamp = dt.timestamp();
-                            let datetime = tantivy::DateTime::from_timestamp_secs(timestamp);
-                            tantivy_doc.add_date(field, datetime);
-                        }
-                    }
-                }
-                FieldType::Facet(_) => {
-                    // Handle both single strings and arrays of strings for facet fields
-                    if let Ok(string_val) = value.decode::<String>() {
-                        if let Ok(facet) = tantivy::schema::Facet::from_text(&string_val) {
-                            tantivy_doc.add_facet(field, facet);
-                        }
-                    } else if let Ok(facet_array) = value.decode::<Vec<rustler::Term>>() {
-                        // Handle arrays of facet values
-                        for facet_item in facet_array {
-                            if let Ok(facet_val) = facet_item.decode::<String>() {
-                                if let Ok(facet) = tantivy::schema::Facet::from_text(&facet_val) {
-                                    tantivy_doc.add_facet(field, facet);
-                                }
-                            }
-                        }
-                    }
-                }
-                FieldType::Bytes(_) => {
-                    if let Ok(string_val) = value.decode::<String>() {
-                        // Assume base64 encoded
-                        if let Ok(bytes) = general_purpose::STANDARD.decode(&string_val) {
-                            tantivy_doc.add_bytes(field, &bytes);
-                        }
-                    }
-                }
-                FieldType::JsonObject(_) => {
-                    // Convert the value to JSON
-                    let json_value = convert_term_to_json_value(value);
-                    let btree_map = convert_json_value_to_btreemap(json_value);
-                    tantivy_doc.add_object(field, btree_map);
-                }
-                FieldType::IpAddr(_) => {
-                    if let Ok(string_val) = value.decode::<String>() {
-                        if let Ok(ip) = string_val.parse::<std::net::IpAddr>() {
-                            let ipv6 = convert_ip_to_ipv6(ip);
-                            tantivy_doc.add_ip_addr(field, ipv6);
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     match writer.add_document(tantivy_doc) {
         Ok(_) => Ok(atoms::ok().encode(env)),
@@ -594,47 +380,13 @@ pub fn writer_add_document_batch<'a>(
     let mut successful_count = 0;
     let mut errors = Vec::new();
 
-    for (index, document) in documents.iter().enumerate() {
-        // Convert document using the same logic as single document addition
-        let doc_map: HashMap<String, rustler::Term> = match document.decode() {
-            Ok(map) => map,
-            Err(_) => {
-                errors.push((index, "Failed to decode document".to_string()));
-                continue;
-            }
-        };
-
-        let mut tantivy_doc = TantivyDocument::default();
-
-        // Process each field in the document
-        let mut doc_valid = true;
-        for (field_name, value) in doc_map {
-            if let Ok(field) = schema.get_field(&field_name) {
-                let field_entry = schema.get_field_entry(field);
-
-                match add_field_to_document(
-                    &mut tantivy_doc,
-                    field,
-                    field_entry.field_type(),
-                    value,
-                ) {
-                    Ok(_) => {}
-                    Err(err) => {
-                        errors.push((index, format!("Field '{}': {}", field_name, err)));
-                        doc_valid = false;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if doc_valid {
-            match writer.add_document(tantivy_doc) {
+    for (index, document) in documents.into_iter().enumerate() {
+        match build_document(schema, document) {
+            Ok(tantivy_doc) => match writer.add_document(tantivy_doc) {
                 Ok(_) => successful_count += 1,
-                Err(e) => {
-                    errors.push((index, format!("Failed to add document: {}", e)));
-                }
-            }
+                Err(e) => errors.push((index, format!("Failed to add document: {}", e))),
+            },
+            Err(e) => errors.push((index, e)),
         }
     }
 
@@ -688,6 +440,39 @@ pub fn validate_document_against_schema<'a>(
 
 /// Helper functions for document operations
 
+/// Builds a Tantivy document from an Elixir map of field names to values.
+///
+/// An unknown field, or a value that does not fit its field's type, is an
+/// error. A list adds each of its values to the field, except for bytes and
+/// JSON fields, whose value can itself be a list.
+pub fn build_document(schema: &Schema, document: rustler::Term) -> Result<TantivyDocument, String> {
+    let doc_map: HashMap<String, rustler::Term> = document
+        .decode()
+        .map_err(|_| "Failed to decode document map: Expected a map".to_string())?;
+    let mut tantivy_doc = TantivyDocument::default();
+
+    for (field_name, value) in doc_map {
+        let field = schema
+            .get_field(&field_name)
+            .map_err(|_| format!("Unknown field: '{}'", field_name))?;
+        let field_type = schema.get_field_entry(field).field_type();
+
+        let values = match field_type {
+            FieldType::Bytes(_) | FieldType::JsonObject(_) => vec![value],
+            _ => value
+                .decode::<Vec<rustler::Term>>()
+                .unwrap_or_else(|_| vec![value]),
+        };
+
+        for value in values {
+            add_field_to_document(&mut tantivy_doc, field, field_type, value)
+                .map_err(|e| format!("Field '{}': {}", field_name, e))?;
+        }
+    }
+
+    Ok(tantivy_doc)
+}
+
 pub fn add_field_to_document(
     doc: &mut TantivyDocument,
     field: Field,
@@ -719,9 +504,8 @@ pub fn add_field_to_document(
             if let Ok(int_val) = value.decode::<i64>() {
                 doc.add_i64(field, int_val);
                 Ok(())
-            } else if let Ok(int_val) = value.decode::<u64>() {
-                doc.add_i64(field, int_val as i64);
-                Ok(())
+            } else if value.decode::<u64>().is_ok() {
+                Err("Value too large for i64 field".to_string())
             } else {
                 Err("Expected numeric value".to_string())
             }
@@ -762,25 +546,13 @@ pub fn add_field_to_document(
             }
         }
         FieldType::Facet(_) => {
-            // Handle both single strings and arrays of strings for facet fields
-            if let Ok(string_val) = value.decode::<String>() {
-                let facet = tantivy::schema::Facet::from_text(&string_val)
-                    .map_err(|_| "Invalid facet format".to_string())?;
-                doc.add_facet(field, facet);
-                Ok(())
-            } else if let Ok(facet_array) = value.decode::<Vec<rustler::Term>>() {
-                // Handle arrays of facet values
-                for facet_item in facet_array {
-                    if let Ok(facet_val) = facet_item.decode::<String>() {
-                        if let Ok(facet) = tantivy::schema::Facet::from_text(&facet_val) {
-                            doc.add_facet(field, facet);
-                        }
-                    }
-                }
-                Ok(())
-            } else {
-                Err("Expected string value or array of strings for facet".to_string())
-            }
+            let string_val: String = value
+                .decode()
+                .map_err(|_| "Expected string value or array of strings for facet")?;
+            let facet = tantivy::schema::Facet::from_text(&string_val)
+                .map_err(|_| "Invalid facet format".to_string())?;
+            doc.add_facet(field, facet);
+            Ok(())
         }
         FieldType::Bytes(_) => {
             if let Ok(bytes_val) = value.decode::<Vec<u8>>() {
@@ -797,9 +569,17 @@ pub fn add_field_to_document(
             }
         }
         FieldType::JsonObject(_) => {
-            let json_value = convert_term_to_json_value(value);
-            let btree_map = convert_json_value_to_btreemap(json_value);
-            doc.add_object(field, btree_map);
+            // A map, or a string holding a JSON object
+            let json_value = match value.decode::<String>() {
+                Ok(json_str) => {
+                    serde_json::from_str(&json_str).map_err(|e| format!("Invalid JSON: {}", e))?
+                }
+                Err(_) => convert_term_to_json_value(value),
+            };
+            if !json_value.is_object() {
+                return Err("Expected a map or a JSON object string".to_string());
+            }
+            doc.add_object(field, convert_json_value_to_btreemap(json_value));
             Ok(())
         }
         FieldType::IpAddr(_) => {

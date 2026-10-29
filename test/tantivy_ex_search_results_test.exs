@@ -86,7 +86,6 @@ defmodule TantivyEx.SearchResultsTest do
 
       first_result = hd(processed)
       assert Map.has_key?(first_result, "score")
-      assert Map.has_key?(first_result, "doc_id")
       assert Map.has_key?(first_result, "title")
     end
 

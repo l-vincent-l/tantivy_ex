@@ -142,22 +142,6 @@ defmodule TantivyExTest do
           flunk("Search operation failed unexpectedly: #{inspect(reason)}")
       end
     end
-
-    test "searches for document IDs", %{index: index} do
-      {:ok, searcher} = Searcher.new(index)
-
-      case Searcher.search_ids(searcher, "novel", 5) do
-        {:ok, doc_ids} ->
-          assert is_list(doc_ids)
-          # Should return document IDs as integers or empty list
-          Enum.each(doc_ids, fn doc_id ->
-            assert is_integer(doc_id) and doc_id >= 0
-          end)
-
-        {:error, reason} ->
-          flunk("Search IDs operation failed unexpectedly: #{inspect(reason)}")
-      end
-    end
   end
 
   describe "integration test" do

@@ -56,21 +56,9 @@ defmodule TantivyEx.SearchResults do
 
   alias TantivyEx.{Schema, Query}
 
-  @type search_result :: %{
-          score: float(),
-          doc_id: pos_integer(),
-          document: map()
-        }
+  @type search_result :: TantivyEx.Searcher.search_result()
 
-  @type processed_result :: %{
-          score: float(),
-          normalized_score: float(),
-          doc_id: pos_integer(),
-          document: map(),
-          highlights: map(),
-          snippet: String.t(),
-          metadata: map()
-        }
+  @type processed_result :: %{optional(String.t()) => term()}
 
   @type result_options :: [
           highlight: boolean(),
@@ -115,7 +103,7 @@ defmodule TantivyEx.SearchResults do
       iex> {:ok, results} = TantivyEx.Searcher.search(searcher, query, 10)
       iex> {:ok, processed} = SearchResults.process(results, schema)
       iex> processed |> hd() |> Map.keys()
-      ["score", "doc_id", "title", "content", "price", "published_at"]
+      ["score", "title", "content", "price", "published_at"]
   """
   @spec process([search_result()], Schema.t(), result_options()) ::
           {:ok, [map()]} | {:error, String.t()}
@@ -425,11 +413,7 @@ defmodule TantivyEx.SearchResults do
 
   defp normalize_result(result, _schema, _opts) do
     # Ensure consistent result structure
-    %{
-      "score" => Map.get(result, "score", 0.0),
-      "doc_id" => Map.get(result, "doc_id", 0)
-    }
-    |> Map.merge(Map.drop(result, ["score", "doc_id"]))
+    Map.put_new(result, "score", 0.0)
   end
 
   defp convert_field_types(result, schema, opts) do
@@ -446,13 +430,20 @@ defmodule TantivyEx.SearchResults do
 
   defp convert_field_value(value, field_name, schema) do
     # Skip meta fields
-    if field_name in ["score", "doc_id"] do
+    if field_name == "score" do
       value
     else
       case Schema.get_field_type(schema, field_name) do
-        {:ok, field_type} -> apply_type_conversion(value, field_type)
+        # A field with several values
+        {:ok, field_type} when is_list(value) ->
+          Enum.map(value, &apply_type_conversion(&1, field_type))
+
+        {:ok, field_type} ->
+          apply_type_conversion(value, field_type)
+
         # Field not in schema, keep as-is
-        {:error, _} -> value
+        {:error, _} ->
+          value
       end
     end
   end
@@ -618,8 +609,8 @@ defmodule TantivyEx.SearchResults do
         metadata = %{
           "position" => index,
           "relevance_tier" => calculate_relevance_tier(Map.get(result, "score", 0.0)),
-          # Exclude score and doc_id
-          "field_count" => map_size(result) - 2
+          # Exclude score
+          "field_count" => map_size(Map.delete(result, "score"))
         }
 
         Map.put(result, "metadata", metadata)

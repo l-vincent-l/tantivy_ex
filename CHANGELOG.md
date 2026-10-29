@@ -17,9 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The NIF is compiled from source** - The fork has no precompiled NIFs: `rustler_precompiled`, its checksum file and the release workflow are removed, as is the `TANTIVY_EX_BUILD` variable. The precompiled NIFs of the upstream package lacked the fork's functions, which failed with `nif_not_loaded`. Compiling requires a Rust toolchain.
 - **Fork metadata** - Version 0.6.0 (0.5.0 is a tag of another fork), and the source URL, documentation links and README point at the fork, which is installed from GitHub. The Mix `rustler` requirement is relaxed to `~> 0.36`.
 - **Tantivy 0.26** - Upgraded from 0.24. The index format is unchanged (version 7), so existing indexes still open. Aggregations parsing a query string use the searched index's tokenizers.
+- **Search results are maps built in Rust** - They were serialized to JSON in Rust and decoded with Jason. Their keys are unchanged.
+- **Values of documents are read the same way by every function** - A string for a bytes field is base64, as in search results: `IndexWriter.add_document/2` took it as raw bytes. A JSON field takes a map or a string holding a JSON object.
+- **`Searcher.search_with_parser/5`** - Takes the default fields without the schema: `search_with_parser(searcher, default_fields, query_str, limit, include_docs)`. It passed the schema where an index was expected, and always failed.
 
 ### Removed
 
+- **`"doc_id"` in search results, and `Searcher.search_ids/3`** - It was the id of the document in its segment, not in the index: two documents could share it, and no function took it. Identify documents with a field of their own.
 - **Placeholder modules** - These modules returned made-up values or did nothing, and are removed with their NIFs, tests and guide:
   - `TantivyEx.SpaceAnalysis`: hardcoded index size and segments.
   - `TantivyEx.CustomCollector`: ignored the query and returned the same scores.
@@ -33,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`Searcher.search/4` with a query string** - The string was ignored and every document matched. It is now parsed over the indexed text fields, with the index's tokenizers, and an invalid query is an error.
+- **Documents with invalid fields are rejected** - `IndexWriter.add_document/2` and `Document.add/3` skipped, without an error, an unknown field, a value of the wrong type (e.g. a negative integer for a `u64` field) or an invalid JSON object, and `Document.add_batch/4` skipped unknown fields. They now return an error naming the field. A list adds each of its values to a field, for every field type.
+- **Multi-valued fields** - Search results kept only the last value of a field. A field with several values now gives a list of them, a field with one value gives that value.
+- **`TantivyEx.Facet`** - Every function except `add_facet/2` expected `{:ok, value}` from the NIFs, which return the value, and failed. `facet_collector_add_facet` mutated a collector shared between processes through a `*const` cast to `*mut`: the collector is now behind a mutex.
 - **Indexes use the registered tokenizers** - The tokenizers registered with `TantivyEx.Tokenizer` were kept in a global manager that no index received: a field using one (e.g. `fr_stem`) could not be indexed. Indexes created or opened now get them. `register_default_tokenizers/0` registers Tantivy's own `default` (lowercased, long words removed) and `raw` (the whole text as one token), so that it does not change the fields using them.
 
 ## [0.4.0] - 2025-06-18
