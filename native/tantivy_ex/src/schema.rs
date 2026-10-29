@@ -3,6 +3,7 @@ use tantivy::schema::{
     BytesOptions, DateOptions, FacetOptions, FieldType, IndexRecordOption, IpAddrOptions,
     JsonObjectOptions, NumericOptions, Schema, TextFieldIndexing, TextOptions,
 };
+use tantivy::tokenizer::RAW_TOKENIZER_NAME;
 
 use crate::resources::{SchemaResource, error};
 
@@ -32,11 +33,11 @@ pub fn schema_add_text_field(
         "STORED" => TextOptions::default().set_stored(),
         "FAST" => TextOptions::default()
             .set_indexing_options(text_indexing())
-            .set_fast(None),
+            .set_fast(RAW_TOKENIZER_NAME),
         "FAST_STORED" => TextOptions::default()
             .set_indexing_options(text_indexing())
             .set_stored()
-            .set_fast(None),
+            .set_fast(RAW_TOKENIZER_NAME),
         other => {
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
@@ -329,6 +330,8 @@ pub fn schema_get_field_type<'a>(
                 FieldType::Bytes(_) => "bytes",
                 FieldType::JsonObject(_) => "json",
                 FieldType::IpAddr(_) => "ip_addr",
+                FieldType::TieBreaker => "tie_breaker",
+                FieldType::Custom(_) => "custom",
             };
             Ok(field_type_str.encode(env))
         }
@@ -378,39 +381,7 @@ fn copy_existing_fields_to_builder(
     schema: &Schema,
     schema_builder: &mut tantivy::schema::SchemaBuilder,
 ) {
-    for (field, field_entry) in schema.fields() {
-        let field_name_existing = schema.get_field_name(field);
-        match field_entry.field_type() {
-            FieldType::Str(text_options) => {
-                schema_builder.add_text_field(field_name_existing, text_options.clone());
-            }
-            FieldType::U64(int_options) => {
-                schema_builder.add_u64_field(field_name_existing, int_options.clone());
-            }
-            FieldType::I64(int_options) => {
-                schema_builder.add_i64_field(field_name_existing, int_options.clone());
-            }
-            FieldType::F64(float_options) => {
-                schema_builder.add_f64_field(field_name_existing, float_options.clone());
-            }
-            FieldType::Bool(bool_options) => {
-                schema_builder.add_bool_field(field_name_existing, bool_options.clone());
-            }
-            FieldType::Date(date_options) => {
-                schema_builder.add_date_field(field_name_existing, date_options.clone());
-            }
-            FieldType::Facet(facet_options) => {
-                schema_builder.add_facet_field(field_name_existing, facet_options.clone());
-            }
-            FieldType::Bytes(bytes_options) => {
-                schema_builder.add_bytes_field(field_name_existing, bytes_options.clone());
-            }
-            FieldType::JsonObject(json_options) => {
-                schema_builder.add_json_field(field_name_existing, json_options.clone());
-            }
-            FieldType::IpAddr(ip_options) => {
-                schema_builder.add_ip_addr_field(field_name_existing, ip_options.clone());
-            }
-        }
+    for (_field, field_entry) in schema.fields() {
+        schema_builder.add_field(field_entry.clone());
     }
 }

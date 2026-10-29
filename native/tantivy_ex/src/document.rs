@@ -290,6 +290,9 @@ pub fn add_field_to_document(
             doc.add_ip_addr(field, ipv6);
             Ok(())
         }
+        FieldType::TieBreaker | FieldType::Custom(_) => {
+            Err("Field type not supported for documents".to_string())
+        }
     }
 }
 pub fn convert_term_to_json_value(term: rustler::Term) -> serde_json::Value {
