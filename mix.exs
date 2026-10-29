@@ -27,7 +27,7 @@ defmodule TantivyEx.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :sasl, :os_mon]
+      extra_applications: [:logger]
     ]
   end
 
@@ -80,7 +80,6 @@ defmodule TantivyEx.MixProject do
         "docs/search_results.md",
         "docs/tokenizers.md",
         "docs/aggregations.md",
-        "docs/otp-distributed-implementation.md",
         "docs/integration-patterns.md",
         "docs/performance-tuning.md",
         "docs/production-deployment.md"
