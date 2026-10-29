@@ -216,10 +216,31 @@ defmodule TantivyEx.SearchResultsTest do
       # Check if custom tags are used
       highlight_text = highlights |> Map.values() |> List.flatten() |> Enum.join(" ")
 
-      if String.length(highlight_text) > 0 do
-        assert String.contains?(highlight_text, "<strong>")
-        assert String.contains?(highlight_text, "</strong>")
-      end
+      assert highlight_text =~ ~r/<strong>elixir<\/strong>/i
+    end
+
+    test "escapes the HTML of the document text", %{schema: schema} do
+      result = %{
+        "score" => 1.0,
+        "content" => "elixir <img src=x onerror=alert(1)> & \"more\""
+      }
+
+      {:ok, [enhanced]} = SearchResults.enhance([result], schema, "elixir", highlight: true)
+
+      assert enhanced["highlights"]["content"] == [
+               "<mark>elixir</mark> &lt;img src=x onerror=alert(1)&gt; &amp; &quot;more&quot;"
+             ]
+    end
+
+    test "never inserts tags inside markup or other tags", %{schema: schema} do
+      result = %{"score" => 1.0, "content" => "<img> mark img"}
+
+      {:ok, [enhanced]} =
+        SearchResults.enhance([result], schema, "img mark", highlight: true, max_highlights: 1)
+
+      assert enhanced["highlights"]["content"] == [
+               "&lt;<mark>img</mark>&gt; <mark>mark</mark> <mark>img</mark>"
+             ]
     end
 
     test "handles boolean queries", %{schema: schema, searcher: searcher} do
