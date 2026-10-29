@@ -273,15 +273,18 @@ defmodule TantivyEx.SchemaFieldTypesTest do
   end
 
   describe "error handling" do
-    test "handles invalid field options gracefully" do
-      schema = Schema.new()
+    test "rejects an invalid field option" do
+      assert_raise ArgumentError, "unknown field option: :invalid_option", fn ->
+        Schema.add_i64_field(Schema.new(), "test", :invalid_option)
+      end
+    end
 
-      # These should still work but might fall back to default options
-      schema = Schema.add_i64_field(schema, "test", :invalid_option)
-      field_names = Schema.get_field_names(schema)
+    test "rejects a field name already in the schema" do
+      schema = Schema.add_text_field(Schema.new(), "title", :text)
 
-      assert "test" in field_names
-      assert {:ok, "i64"} = Schema.get_field_type(schema, "test")
+      assert_raise RuntimeError, ~r/Field "title" already exists in the schema/, fn ->
+        Schema.add_u64_field(schema, "title", :indexed)
+      end
     end
   end
 

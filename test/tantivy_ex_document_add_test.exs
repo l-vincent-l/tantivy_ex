@@ -76,4 +76,66 @@ defmodule TantivyExDocumentAddTest do
       assert :ok = IndexWriter.add_document(writer, %{"meta" => ~s({"a": 1})})
     end
   end
+
+  describe "deletion by term" do
+    setup do
+      schema =
+        Schema.new()
+        |> Schema.add_text_field_with_tokenizer("sku", :text_stored, "raw")
+        |> Schema.add_text_field_with_tokenizer("body", :text_stored, "en_stem")
+        |> Schema.add_date_field("at", :indexed_stored)
+
+      {:ok, index} = Index.create_in_ram(schema)
+      {:ok, writer} = IndexWriter.new(index, 50_000_000)
+
+      :ok =
+        IndexWriter.add_document(writer, %{
+          "sku" => "AB-12",
+          "body" => "running dogs",
+          "at" => "2024-01-15T10:30:00Z"
+        })
+
+      :ok = IndexWriter.add_document(writer, %{"sku" => "CD-34", "body" => "cats", "at" => 0})
+      :ok = IndexWriter.commit(writer)
+      %{schema: schema, index: index, writer: writer}
+    end
+
+    defp skus(index) do
+      {:ok, searcher} = Searcher.new(index)
+      {:ok, results} = Searcher.search(searcher, "*", 10)
+      results |> Enum.map(& &1["sku"]) |> Enum.sort()
+    end
+
+    test "analyzes the value with the field's tokenizer", ctx do
+      # A raw field keeps the capitals
+      assert {:ok, :deleted} = Document.delete(ctx.writer, "sku", "AB-12", ctx.schema)
+      :ok = IndexWriter.commit(ctx.writer)
+      assert skus(ctx.index) == ["CD-34"]
+
+      # A stemmed field matches the inflected words
+      assert {:ok, :deleted} = Document.delete(ctx.writer, "body", "cat", ctx.schema)
+      :ok = IndexWriter.commit(ctx.writer)
+      assert skus(ctx.index) == []
+    end
+
+    test "parses dates as the documents do", ctx do
+      assert {:ok, :deleted} =
+               Document.delete(ctx.writer, "at", "2024-01-15T10:30:00Z", ctx.schema)
+
+      :ok = IndexWriter.commit(ctx.writer)
+      assert skus(ctx.index) == ["CD-34"]
+    end
+
+    test "update replaces the document, without a duplicate", ctx do
+      updated = %{"sku" => "AB-12", "body" => "sleeping dogs", "at" => 0}
+      assert {:ok, :updated} = Document.update(ctx.writer, "sku", "AB-12", updated, ctx.schema)
+      :ok = IndexWriter.commit(ctx.writer)
+      assert skus(ctx.index) == ["AB-12", "CD-34"]
+    end
+
+    test "a value without terms is an error", ctx do
+      assert {:error, reason} = Document.delete(ctx.writer, "body", "  ", ctx.schema)
+      assert reason =~ "has no terms"
+    end
+  end
 end

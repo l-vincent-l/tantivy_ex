@@ -10,6 +10,7 @@ pub mod modules {
     pub mod resources;
     pub mod schema;
     pub mod search;
+    pub mod terms;
     pub mod tokenizer;
 }
 

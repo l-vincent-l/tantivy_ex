@@ -388,30 +388,6 @@ defmodule TantivyEx.Tokenizer do
   end
 
   @doc """
-  Process pre-tokenized text.
-
-  Useful when you have already tokenized text and want to pass it to Tantivy.
-
-  ## Parameters
-
-  - `tokens`: List of pre-tokenized strings
-
-  ## Examples
-
-      iex> tokens = ["hello", "world", "test"]
-      iex> TantivyEx.Tokenizer.process_pre_tokenized_text(tokens)
-      "PreTokenizedString([\"hello\", \"world\", \"test\"])"
-  """
-  @spec process_pre_tokenized_text([String.t()]) :: String.t()
-  def process_pre_tokenized_text(tokens) when is_list(tokens) do
-    case Native.process_pre_tokenized_text(tokens) do
-      {:ok, result} -> result
-      result when is_binary(result) -> result
-      {:error, reason} -> raise "Failed to process pre-tokenized text: #{reason}"
-    end
-  end
-
-  @doc """
   Register a language-specific stemming tokenizer.
 
   This is a convenience function that creates a text analyzer with lowercasing and stemming

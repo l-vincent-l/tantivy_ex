@@ -143,6 +143,9 @@ defmodule TantivyEx.Query do
   Creates a phrase query for exact phrase matching.
 
   Phrase queries match documents where the specified field contains the exact sequence of terms.
+  The words are analyzed with the field's tokenizer, as the indexed text was:
+  `["Hello", "World"]` matches "hello world" with the `"default"` tokenizer, and
+  an element can hold several words (`["hello world"]`).
 
   ## Parameters
 
@@ -280,7 +283,8 @@ defmodule TantivyEx.Query do
   Creates a fuzzy query for approximate matching.
 
   Fuzzy queries match terms that are similar to the specified term, allowing for typos
-  and minor spelling differences.
+  and minor spelling differences. The term is analyzed with the field's tokenizer
+  (lowercased by most), and must give a single word.
 
   ## Parameters
 
@@ -311,7 +315,9 @@ defmodule TantivyEx.Query do
   Creates a wildcard query for pattern matching.
 
   Wildcard queries support `*` (matches any sequence of characters) and
-  `?` (matches any single character).
+  `?` (matches any single character); the other characters match themselves.
+  The pattern is matched against the indexed terms, without analysis: on a
+  lowercased field, write it in lowercase.
 
   ## Parameters
 
@@ -360,7 +366,9 @@ defmodule TantivyEx.Query do
   Creates a phrase prefix query for autocomplete-style search.
 
   Phrase prefix queries match phrases where the last term is treated as a prefix.
-  Useful for autocomplete functionality.
+  Useful for autocomplete functionality. The terms are not analyzed: give them
+  as they are indexed, e.g. with `TantivyEx.Tokenizer.tokenize_text/2` and the
+  field's tokenizer (a stemmer would change a prefix).
 
   ## Parameters
 

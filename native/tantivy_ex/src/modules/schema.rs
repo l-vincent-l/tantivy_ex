@@ -4,7 +4,7 @@ use tantivy::schema::{
     JsonObjectOptions, NumericOptions, Schema, TextFieldIndexing, TextOptions,
 };
 
-use crate::modules::resources::SchemaResource;
+use crate::modules::resources::{error, SchemaResource};
 
 /// The indexing of text fields: with term frequencies and positions, as
 /// Tantivy's `TEXT`, for BM25 scoring and phrase queries.
@@ -25,9 +25,6 @@ pub fn schema_add_text_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     // Parse options for the new field
     let field_options = match options.as_str() {
         "TEXT_STORED" => TextOptions::default()
@@ -42,13 +39,17 @@ pub fn schema_add_text_field(
             .set_indexing_options(text_indexing())
             .set_stored()
             .set_fast(None),
-        _ => TextOptions::default().set_indexing_options(text_indexing()),
+        other => {
+            return Err(error(format!(
+                "Unknown option {:?} for field {:?}",
+                other, field_name
+            )))
+        }
     };
 
-    schema_builder.add_text_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_text_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -58,9 +59,6 @@ pub fn schema_add_text_field_with_tokenizer(
     options: String,
     tokenizer: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     // Parse options and configure with custom tokenizer
     let field_options = match options.as_str() {
         "TEXT_STORED" => TextOptions::default()
@@ -73,13 +71,17 @@ pub fn schema_add_text_field_with_tokenizer(
             // For STORED-only fields, we don't set indexing options or tokenizer
             TextOptions::default().set_stored()
         }
-        _ => TextOptions::default().set_indexing_options(text_indexing().set_tokenizer(&tokenizer)),
+        other => {
+            return Err(error(format!(
+                "Unknown option {:?} for field {:?}",
+                other, field_name
+            )))
+        }
     };
 
-    schema_builder.add_text_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_text_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -88,9 +90,6 @@ pub fn schema_add_u64_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     // Parse options for the new field
     let field_options = match options.as_str() {
         "INDEXED_STORED" => NumericOptions::default().set_indexed().set_stored(),
@@ -98,13 +97,17 @@ pub fn schema_add_u64_field(
         "STORED" => NumericOptions::default().set_stored(),
         "FAST" => NumericOptions::default().set_fast(),
         "FAST_STORED" => NumericOptions::default().set_fast().set_stored(),
-        _ => NumericOptions::default().set_indexed(),
+        other => {
+            return Err(error(format!(
+                "Unknown option {:?} for field {:?}",
+                other, field_name
+            )))
+        }
     };
 
-    schema_builder.add_u64_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_u64_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -113,22 +116,23 @@ pub fn schema_add_i64_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     let field_options = match options.as_str() {
         "INDEXED_STORED" => NumericOptions::default().set_indexed().set_stored(),
         "INDEXED" => NumericOptions::default().set_indexed(),
         "STORED" => NumericOptions::default().set_stored(),
         "FAST" => NumericOptions::default().set_fast(),
         "FAST_STORED" => NumericOptions::default().set_fast().set_stored(),
-        _ => NumericOptions::default().set_indexed(),
+        other => {
+            return Err(error(format!(
+                "Unknown option {:?} for field {:?}",
+                other, field_name
+            )))
+        }
     };
 
-    schema_builder.add_i64_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_i64_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -137,22 +141,23 @@ pub fn schema_add_f64_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     let field_options = match options.as_str() {
         "INDEXED_STORED" => NumericOptions::default().set_indexed().set_stored(),
         "INDEXED" => NumericOptions::default().set_indexed(),
         "STORED" => NumericOptions::default().set_stored(),
         "FAST" => NumericOptions::default().set_fast(),
         "FAST_STORED" => NumericOptions::default().set_fast().set_stored(),
-        _ => NumericOptions::default().set_indexed(),
+        other => {
+            return Err(error(format!(
+                "Unknown option {:?} for field {:?}",
+                other, field_name
+            )))
+        }
     };
 
-    schema_builder.add_f64_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_f64_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -161,22 +166,23 @@ pub fn schema_add_bool_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     let field_options = match options.as_str() {
         "INDEXED_STORED" => NumericOptions::default().set_indexed().set_stored(),
         "INDEXED" => NumericOptions::default().set_indexed(),
         "STORED" => NumericOptions::default().set_stored(),
         "FAST" => NumericOptions::default().set_fast(),
         "FAST_STORED" => NumericOptions::default().set_fast().set_stored(),
-        _ => NumericOptions::default().set_indexed(),
+        other => {
+            return Err(error(format!(
+                "Unknown option {:?} for field {:?}",
+                other, field_name
+            )))
+        }
     };
 
-    schema_builder.add_bool_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_bool_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -185,22 +191,23 @@ pub fn schema_add_date_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     let field_options = match options.as_str() {
         "INDEXED_STORED" => DateOptions::default().set_indexed().set_stored(),
         "INDEXED" => DateOptions::default().set_indexed(),
         "STORED" => DateOptions::default().set_stored(),
         "FAST" => DateOptions::default().set_fast(),
         "FAST_STORED" => DateOptions::default().set_fast().set_stored(),
-        _ => DateOptions::default().set_indexed(),
+        other => {
+            return Err(error(format!(
+                "Unknown option {:?} for field {:?}",
+                other, field_name
+            )))
+        }
     };
 
-    schema_builder.add_date_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_date_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -209,16 +216,12 @@ pub fn schema_add_facet_field(
     field_name: String,
     _options: String, // Facet fields don't use the same options pattern
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     // Facet fields are always indexed; they are also stored, to be in the results
     let field_options = FacetOptions::default().set_stored();
 
-    schema_builder.add_facet_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_facet_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -227,22 +230,23 @@ pub fn schema_add_bytes_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     let field_options = match options.as_str() {
         "INDEXED_STORED" => BytesOptions::default().set_indexed().set_stored(),
         "INDEXED" => BytesOptions::default().set_indexed(),
         "STORED" => BytesOptions::default().set_stored(),
         "FAST" => BytesOptions::default().set_fast(),
         "FAST_STORED" => BytesOptions::default().set_fast().set_stored(),
-        _ => BytesOptions::default().set_stored(), // Bytes are typically stored
+        other => {
+            return Err(error(format!(
+                "Unknown option {:?} for field {:?}",
+                other, field_name
+            )))
+        }
     };
 
-    schema_builder.add_bytes_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_bytes_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -251,21 +255,23 @@ pub fn schema_add_json_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     let field_options = match options.as_str() {
         "STORED" => JsonObjectOptions::default().set_stored(),
+        "TEXT" => JsonObjectOptions::default().set_indexing_options(text_indexing()),
         "TEXT_STORED" => JsonObjectOptions::default()
             .set_indexing_options(text_indexing())
             .set_stored(),
-        _ => JsonObjectOptions::default().set_indexing_options(text_indexing()),
+        other => {
+            return Err(error(format!(
+                "Unknown option {:?} for field {:?}",
+                other, field_name
+            )))
+        }
     };
 
-    schema_builder.add_json_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_json_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -274,22 +280,23 @@ pub fn schema_add_ip_addr_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    let mut schema_builder = Schema::builder();
-    copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
-
     let field_options = match options.as_str() {
         "INDEXED_STORED" => IpAddrOptions::default().set_indexed().set_stored(),
         "INDEXED" => IpAddrOptions::default().set_indexed(),
         "STORED" => IpAddrOptions::default().set_stored(),
         "FAST" => IpAddrOptions::default().set_fast(),
         "FAST_STORED" => IpAddrOptions::default().set_fast().set_stored(),
-        _ => IpAddrOptions::default().set_indexed(),
+        other => {
+            return Err(error(format!(
+                "Unknown option {:?} for field {:?}",
+                other, field_name
+            )))
+        }
     };
 
-    schema_builder.add_ip_addr_field(&field_name, field_options);
-    let schema = schema_builder.build();
-
-    Ok(ResourceArc::new(SchemaResource { schema }))
+    with_field(&schema_res.schema, &field_name, |builder| {
+        builder.add_ip_addr_field(&field_name, field_options);
+    })
 }
 
 #[rustler::nif]
@@ -354,7 +361,29 @@ pub fn schema_validate<'a>(
     Ok(message.encode(env))
 }
 
-/// Helper function to copy existing fields to a new schema builder (DRY principle)
+/// The schema with one more field, added by `add`. Tantivy's schema builder
+/// panics on a field name already in the schema: it is an error here.
+fn with_field(
+    schema: &Schema,
+    field_name: &str,
+    add: impl FnOnce(&mut tantivy::schema::SchemaBuilder),
+) -> NifResult<ResourceArc<SchemaResource>> {
+    if schema.get_field(field_name).is_ok() {
+        return Err(error(format!(
+            "Field {:?} already exists in the schema",
+            field_name
+        )));
+    }
+
+    let mut builder = Schema::builder();
+    copy_existing_fields_to_builder(schema, &mut builder);
+    add(&mut builder);
+    Ok(ResourceArc::new(SchemaResource {
+        schema: builder.build(),
+    }))
+}
+
+/// Adds the fields of `schema` to `schema_builder`.
 fn copy_existing_fields_to_builder(
     schema: &Schema,
     schema_builder: &mut tantivy::schema::SchemaBuilder,

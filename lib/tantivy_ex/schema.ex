@@ -105,7 +105,7 @@ defmodule TantivyEx.Schema do
         :stored -> "STORED"
         :fast -> "FAST"
         :fast_stored -> "FAST_STORED"
-        _ -> "TEXT"
+        other -> raise ArgumentError, "unknown field option: #{inspect(other)}"
       end
 
     case Native.schema_add_text_field(schema, field_name, options_str) do
@@ -175,7 +175,7 @@ defmodule TantivyEx.Schema do
         :text -> "TEXT"
         :text_stored -> "TEXT_STORED"
         :stored -> "STORED"
-        _ -> "TEXT"
+        other -> raise ArgumentError, "unknown field option: #{inspect(other)}"
       end
 
     case Native.schema_add_text_field_with_tokenizer(schema, field_name, options_str, tokenizer) do
@@ -219,7 +219,7 @@ defmodule TantivyEx.Schema do
         :stored -> "STORED"
         :fast -> "FAST"
         :fast_stored -> "FAST_STORED"
-        _ -> "INDEXED"
+        other -> raise ArgumentError, "unknown field option: #{inspect(other)}"
       end
 
     case Native.schema_add_u64_field(schema, field_name, options_str) do
@@ -260,7 +260,7 @@ defmodule TantivyEx.Schema do
         :stored -> "STORED"
         :fast -> "FAST"
         :fast_stored -> "FAST_STORED"
-        _ -> "INDEXED"
+        other -> raise ArgumentError, "unknown field option: #{inspect(other)}"
       end
 
     case Native.schema_add_i64_field(schema, field_name, options_str) do
@@ -291,7 +291,7 @@ defmodule TantivyEx.Schema do
         :stored -> "STORED"
         :fast -> "FAST"
         :fast_stored -> "FAST_STORED"
-        _ -> "INDEXED"
+        other -> raise ArgumentError, "unknown field option: #{inspect(other)}"
       end
 
     case Native.schema_add_f64_field(schema, field_name, options_str) do
@@ -322,7 +322,7 @@ defmodule TantivyEx.Schema do
         :stored -> "STORED"
         :fast -> "FAST"
         :fast_stored -> "FAST_STORED"
-        _ -> "INDEXED"
+        other -> raise ArgumentError, "unknown field option: #{inspect(other)}"
       end
 
     case Native.schema_add_bool_field(schema, field_name, options_str) do
@@ -353,7 +353,7 @@ defmodule TantivyEx.Schema do
         :stored -> "STORED"
         :fast -> "FAST"
         :fast_stored -> "FAST_STORED"
-        _ -> "INDEXED"
+        other -> raise ArgumentError, "unknown field option: #{inspect(other)}"
       end
 
     case Native.schema_add_date_field(schema, field_name, options_str) do
@@ -407,7 +407,7 @@ defmodule TantivyEx.Schema do
         :fast -> "FAST"
         :fast_stored -> "FAST_STORED"
         # Default to stored for bytes
-        _ -> "STORED"
+        other -> raise ArgumentError, "unknown field option: #{inspect(other)}"
       end
 
     case Native.schema_add_bytes_field(schema, field_name, options_str) do
@@ -436,7 +436,7 @@ defmodule TantivyEx.Schema do
         :text -> "TEXT"
         :text_stored -> "TEXT_STORED"
         :stored -> "STORED"
-        _ -> "TEXT"
+        other -> raise ArgumentError, "unknown field option: #{inspect(other)}"
       end
 
     case Native.schema_add_json_field(schema, field_name, options_str) do
@@ -467,7 +467,7 @@ defmodule TantivyEx.Schema do
         :stored -> "STORED"
         :fast -> "FAST"
         :fast_stored -> "FAST_STORED"
-        _ -> "INDEXED"
+        other -> raise ArgumentError, "unknown field option: #{inspect(other)}"
       end
 
     case Native.schema_add_ip_addr_field(schema, field_name, options_str) do

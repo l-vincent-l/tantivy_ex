@@ -97,9 +97,6 @@ detailed = TantivyEx.Tokenizer.tokenize_text_detailed("simple", "Hello World")
 # List all registered tokenizers
 available = TantivyEx.Tokenizer.list_tokenizers()
 # ["default", "simple", "keyword", "whitespace", ...]
-
-# Process pre-tokenized text
-result = TantivyEx.Tokenizer.process_pre_tokenized_text(["pre", "tokenized", "words"])
 ```
 
 #### Performance Testing

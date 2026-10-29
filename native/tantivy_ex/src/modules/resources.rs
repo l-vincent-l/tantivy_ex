@@ -139,3 +139,8 @@ pub fn json_to_term<'a>(env: Env<'a>, value: &serde_json::Value) -> Term<'a> {
         }
     }
 }
+
+/// An error returned to Elixir as `{:error, message}`.
+pub fn error<S: Into<String>>(message: S) -> rustler::Error {
+    rustler::Error::Term(Box::new(message.into()))
+}
