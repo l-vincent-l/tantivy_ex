@@ -168,7 +168,10 @@ defmodule TantivyEx.Native do
   def facet_collector_add_facet(_collector, _facet_path), do: :erlang.nif_error(:nif_not_loaded)
   def facet_search(_searcher, _query, _collector), do: :erlang.nif_error(:nif_not_loaded)
   def facet_term_query(_schema, _field_name, _facet_path), do: :erlang.nif_error(:nif_not_loaded)
-  def facet_multi_query(_field_name, _facet_paths, _occur), do: :erlang.nif_error(:nif_not_loaded)
+
+  def facet_multi_query(_schema, _field_name, _facet_paths, _occur),
+    do: :erlang.nif_error(:nif_not_loaded)
+
   def facet_from_text(_facet_path), do: :erlang.nif_error(:nif_not_loaded)
   def facet_to_string(_facet), do: :erlang.nif_error(:nif_not_loaded)
 

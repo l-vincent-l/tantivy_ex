@@ -138,6 +138,12 @@ defmodule TantivyEx.SearchResults do
   - `query`: Original search query for highlighting
   - `options`: Enhancement options
 
+  With `highlight: true`, `"highlights"` gives, for the `"title"`, `"content"`,
+  `"description"`, `"body"` and `"summary"` fields, passages around the query
+  terms as HTML: the text of the document is HTML-escaped, and the terms are
+  between the `:highlight_tags` (`{"<mark>", "</mark>"}` by default), which
+  are inserted as they are. The `"snippet"` is plain text, not HTML.
+
   ## Examples
 
       iex> options = [highlight: true, snippet_length: 150, include_metadata: true]
@@ -687,12 +693,41 @@ defmodule TantivyEx.SearchResults do
     end_pos = min(String.length(text), position + context_chars)
 
     passage = String.slice(text, start_pos, end_pos - start_pos)
+    highlight_passage(passage, query_terms, {start_tag, end_tag})
+  end
 
-    # Highlight query terms in the passage
-    Enum.reduce(query_terms, passage, fn term, acc ->
-      regex = ~r/#{Regex.escape(term)}/i
-      String.replace(acc, regex, "#{start_tag}\\0#{end_tag}")
-    end)
+  # The passage as HTML: its text escaped, and its query terms between the
+  # tags. The terms are matched in one pass, longest first, on the text
+  # before it is escaped, so that tags are never inserted inside markup.
+  defp highlight_passage(passage, query_terms, {start_tag, end_tag}) do
+    alternatives =
+      query_terms
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.sort_by(&String.length/1, :desc)
+      |> Enum.map_join("|", &Regex.escape/1)
+
+    if alternatives == "" do
+      html_escape(passage)
+    else
+      # The parts alternate: text, match, text, match... text
+      alternatives
+      |> Regex.compile!("iu")
+      |> Regex.split(passage, include_captures: true)
+      |> Enum.with_index()
+      |> Enum.map_join(fn
+        {match, index} when rem(index, 2) == 1 -> start_tag <> html_escape(match) <> end_tag
+        {text, _index} -> html_escape(text)
+      end)
+    end
+  end
+
+  defp html_escape(text) do
+    text
+    |> String.replace("&", "&amp;")
+    |> String.replace("<", "&lt;")
+    |> String.replace(">", "&gt;")
+    |> String.replace("\"", "&quot;")
+    |> String.replace("'", "&#39;")
   end
 
   defp generate_snippet(result, query_terms, snippet_length) do
