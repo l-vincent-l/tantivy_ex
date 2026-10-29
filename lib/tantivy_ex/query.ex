@@ -517,7 +517,8 @@ defmodule TantivyEx.Query do
       true
   """
   @spec facet_term(Schema.t(), String.t(), String.t()) :: {:ok, t()} | {:error, String.t()}
-  def facet_term(schema, field_name, facet_value) when is_binary(field_name) and is_binary(facet_value) do
+  def facet_term(schema, field_name, facet_value)
+      when is_binary(field_name) and is_binary(facet_value) do
     case Native.facet_term_query(schema, field_name, facet_value) do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
