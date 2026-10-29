@@ -11,102 +11,45 @@ TantivyEx provides a complete, type-safe interface to Tantivy - Rust's fastest f
 
 ## Features
 
-- **High Performance**: Built on Tantivy, one of the fastest search engines available
-- **Complete Field Type Support**: Text, numeric, boolean, date, facet, bytes, JSON, and IP address fields
-- **Advanced Text Processing**: Comprehensive tokenizer system with 17+ language support, custom regex patterns, n-grams, and configurable text analyzers
-- **Intelligent Text Analysis**: Stemming, stop word filtering, case normalization, and language-specific processing
-- **Dynamic Tokenizer Management**: Runtime tokenizer registration, enumeration, and configuration
-- **Schema Management**: Dynamic schema building with validation and introspection
-- **Flexible Storage**: In-memory or persistent disk-based indexes
-- **Type Safety**: Full Elixir typespecs and compile-time safety
-- **Advanced Aggregations**: Elasticsearch-compatible bucket aggregations (terms, histogram, date_histogram, range) and metric aggregations (avg, min, max, sum, stats, percentiles) with nested sub-aggregations
-- **Search Features**: Full-text search, faceted search, range queries, and comprehensive analytics
+- **Field types**: text, numeric (`u64`, `i64`, `f64`), boolean, date, facet, bytes, JSON and IP address fields
+- **Queries**: query strings with Tantivy's syntax, or term, phrase, range, boolean, fuzzy, regex, wildcard, phrase prefix, facet and more-like-this queries
+- **Text analysis**: built-in and custom tokenizers, stemming and stop words for 18 languages, n-grams, ASCII folding
+- **Snippets**: the fragment of a text matching a query, with the terms to highlight
+- **Aggregations**: terms, histogram, date histogram and range buckets, with average, min, max, sum, stats and percentiles metrics
+- **Storage**: indexes on disk or in memory
 
 ## Quick Start
 
 ```elixir
-# Register tokenizers (recommended for production)
-TantivyEx.Tokenizer.register_default_tokenizers()
+alias TantivyEx.{Schema, Index, IndexWriter, Searcher}
 
-# Create a schema with custom tokenizers
-schema = TantivyEx.Schema.new()
-|> TantivyEx.Schema.add_text_field_with_tokenizer("title", :text_stored, "default")
-|> TantivyEx.Schema.add_text_field_with_tokenizer("body", :text, "default")
-|> TantivyEx.Schema.add_u64_field("id", :indexed_stored)
-|> TantivyEx.Schema.add_date_field("published_at", :fast)
+schema =
+  Schema.new()
+  |> Schema.add_u64_field("id", :indexed_stored)
+  |> Schema.add_text_field("title", :text_stored)
+  |> Schema.add_text_field("body", :text)
 
-# Create an index
-# Option 1: Open existing or create new (recommended for production)
-{:ok, index} = TantivyEx.Index.open_or_create("/path/to/index", schema)
+{:ok, index} = Index.create_in_ram(schema)
 
-# Option 2: Create in-memory index for testing
-{:ok, index} = TantivyEx.Index.create_in_ram(schema)
+{:ok, writer} = IndexWriter.new(index)
+:ok = IndexWriter.add_document(writer, %{"id" => 1, "title" => "Hello", "body" => "Full-text search in Elixir"})
+:ok = IndexWriter.add_document(writer, %{"id" => 2, "title" => "Goodbye", "body" => "Nothing to see here"})
+:ok = IndexWriter.commit(writer)
 
-# Option 3: Create new persistent index (fails if exists)
-{:ok, index} = TantivyEx.Index.create_in_dir("/path/to/index", schema)
-
-# Option 4: Open existing index (fails if doesn't exist)
-{:ok, index} = TantivyEx.Index.open("/path/to/index")
-
-# Get a writer
-{:ok, writer} = TantivyEx.IndexWriter.new(index, 50_000_000)
-
-# Add documents
-doc = %{
-  "title" => "Getting Started with TantivyEx",
-  "body" => "This is a comprehensive guide to using TantivyEx...",
-  "id" => 1,
-  "published_at" => "2024-01-15T10:30:00Z"
-}
-
-:ok = TantivyEx.IndexWriter.add_document(writer, doc)
-:ok = TantivyEx.IndexWriter.commit(writer)
-
-# Search
-{:ok, searcher} = TantivyEx.Searcher.new(index)
-{:ok, results} = TantivyEx.Searcher.search(searcher, "comprehensive guide", 10)
-
-# Advanced Aggregations (New in v0.2.0)
-{:ok, query} = TantivyEx.Query.all()
-
-# Terms aggregation for category analysis
-aggregations = %{
-  "categories" => %{
-    "terms" => %{
-      "field" => "category",
-      "size" => 10
-    }
-  }
-}
-
-{:ok, agg_results} = TantivyEx.Aggregation.run(searcher, query, aggregations)
-
-# Histogram aggregation for numerical analysis
-price_histogram = %{
-  "price_ranges" => %{
-    "histogram" => %{
-      "field" => "price",
-      "interval" => 50.0
-    }
-  }
-}
-
-{:ok, histogram_results} = TantivyEx.Aggregation.run(searcher, query, price_histogram)
-
-# Combined search with aggregations
-{:ok, search_results, agg_results} = TantivyEx.Aggregation.search_with_aggregations(
-  searcher,
-  query,
-  aggregations,
-  20  # search limit
-)
-
+{:ok, searcher} = Searcher.new(index)
+{:ok, [result]} = Searcher.search(searcher, "elixir", 10)
+result["title"]
+# => "Hello"
 ```
+
+The [Quick Start Tutorial](docs/quick-start.md) goes further: persistent
+indexes, the query syntax, snippets, updates and deletions.
 
 ## Installation
 
 Add `tantivy_ex` to your list of dependencies in `mix.exs`:
 
+<!-- skip-test -->
 ```elixir
 def deps do
   [
@@ -115,50 +58,25 @@ def deps do
 end
 ```
 
-The NIF is compiled from source, which requires a Rust toolchain.
+The NIF is compiled from source, which requires:
 
-TantivyEx requires:
-
-- **Elixir**: 1.18 or later
-- **Rust**: 1.70 or later (for compilation)
-- **System**: Compatible with Linux, macOS, and Windows
+- **Elixir** 1.15 or later
+- **Rust** 1.91 or later
 
 ## Documentation
 
-### Complete Guides
-
 **[Browse All Guides →](docs/guides.md)**
 
-#### Getting Started
-
-- **[Installation & Setup](docs/installation-setup.md)**: Complete installation guide with configuration options
-- **[Quick Start Tutorial](docs/quick-start.md)**: Hands-on tutorial for your first search application
-- **[Core Concepts](docs/core-concepts.md)**: Essential concepts with comprehensive glossary
-
-#### Development & Production
-
-- **[Performance Tuning](docs/performance-tuning.md)**: Optimization strategies for indexing and search
-- **[Production Deployment](docs/production-deployment.md)**: Scalability, monitoring, and operational best practices
-- **[Integration Patterns](docs/integration-patterns.md)**: Phoenix/LiveView integration and advanced architectures
-
-### API Documentation
-
-#### Core Components
-
-- **[Schema Management](docs/schema.md)**: Field types, options, and schema design patterns
-- **[Document Operations](docs/documents.md)**: Adding, updating, and managing documents
-- **[Indexing](docs/indexing.md)**: Index creation, writing, and maintenance
-- **[Search Operations](docs/search.md)**: Query syntax, ranking, and search best practices
-- **[Search Results](docs/search_results.md)**: Result handling and formatting
-- **[Aggregations](docs/aggregations.md)**: Data analysis, bucket and metric aggregations, and analytics
-- **[Tokenizers](docs/tokenizers.md)**: Text analysis, custom tokenizers, and language support
-
-#### API Reference
-
-- **[TantivyEx](https://hexdocs.pm/tantivy_ex/TantivyEx.html)**: Main module with index operations
-- **[TantivyEx.Schema](https://hexdocs.pm/tantivy_ex/TantivyEx.Schema.html)**: Schema definition and management
-- **[TantivyEx.Aggregation](https://hexdocs.pm/tantivy_ex/TantivyEx.Aggregation.html)**: Data analysis and aggregation operations
-- **[TantivyEx.Native](https://hexdocs.pm/tantivy_ex/TantivyEx.Native.html)**: Low-level NIF functions
+- **[Installation & Setup](docs/installation-setup.md)**: installation and configuration
+- **[Quick Start Tutorial](docs/quick-start.md)**: a first search application
+- **[Core Concepts](docs/core-concepts.md)**: the building blocks, with a glossary
+- **[Schema Management](docs/schema.md)**: field types, options and schema design
+- **[Document Operations](docs/documents.md)**: adding, updating and deleting documents
+- **[Indexing](docs/indexing.md)**: index creation, writing and maintenance
+- **[Search Operations](docs/search.md)**: query syntax and ranking
+- **[Search Results](docs/search_results.md)**: handling and formatting results
+- **[Tokenizers](docs/tokenizers.md)**: text analysis, custom tokenizers and languages
+- **[Aggregations](docs/aggregations.md)**: bucket and metric aggregations
 
 ## Field Types
 
@@ -179,70 +97,48 @@ TantivyEx supports all Tantivy field types with comprehensive options:
 
 ## Custom Tokenizers
 
-**New in v0.2.0:** TantivyEx now provides comprehensive tokenizer support with advanced text analysis capabilities:
-
 ```elixir
-# Register default tokenizers (recommended starting point)
+# The built-in tokenizers: "default", "simple", "whitespace", "raw"...
 TantivyEx.Tokenizer.register_default_tokenizers()
 
-# Create custom text analyzers with advanced processing
-TantivyEx.Tokenizer.register_text_analyzer(
-  "english_full",
-  "simple",           # base tokenizer
-  true,               # lowercase
-  "english",          # stop words language
-  "english",          # stemming language
-  50                  # remove tokens longer than 50 chars
-)
+# A text analyzer: a base tokenizer, then filters
+{:ok, _} =
+  TantivyEx.Tokenizer.register_text_analyzer(
+    "english_full",
+    # base tokenizer
+    "simple",
+    # lowercase
+    true,
+    # stop words language
+    "english",
+    # stemming language
+    "english",
+    # remove tokens longer than 50 characters
+    50
+  )
 
-# Register specialized tokenizers for different use cases
-TantivyEx.Tokenizer.register_regex_tokenizer("email", "\\b[\\w._%+-]+@[\\w.-]+\\.[A-Z|a-z]{2,}\\b")
-TantivyEx.Tokenizer.register_ngram_tokenizer("fuzzy_search", 2, 4, false)
+TantivyEx.Tokenizer.tokenize_text("english_full", "The Running Dogs")
+# => ["run", "dog"]
 
-# Add fields with specific tokenizers
-schema = TantivyEx.Schema.new()
-|> TantivyEx.Schema.add_text_field_with_tokenizer("content", :text, "english_full")
-|> TantivyEx.Schema.add_text_field_with_tokenizer("product_code", :text_stored, "simple")
-|> TantivyEx.Schema.add_text_field_with_tokenizer("tags", :text, "whitespace")
+# Fields use a tokenizer by name
+schema =
+  TantivyEx.Schema.new()
+  |> TantivyEx.Schema.add_text_field_with_tokenizer("content", :text, "english_full")
+  |> TantivyEx.Schema.add_text_field_with_tokenizer("tags", :text, "whitespace")
+  |> TantivyEx.Schema.add_text_field_with_tokenizer("sku", :text_stored, "raw")
 ```
 
-### Available Tokenizer Types
-
-- **Simple Tokenizer**: Basic punctuation and whitespace splitting with lowercase normalization
-- **Whitespace Tokenizer**: Splits only on whitespace, preserves case and punctuation
-- **Regex Tokenizer**: Custom pattern-based tokenization for specialized formats
-- **N-gram Tokenizer**: Character or word n-grams for fuzzy search and autocomplete
-- **Text Analyzer**: Advanced processing with configurable filters (stemming, stop words, case normalization)
-
-### Multi-Language Support
-
-Built-in support for 17+ languages with language-specific stemming and stop words:
-
-```elixir
-# Language-specific analyzers
-TantivyEx.Tokenizer.register_language_analyzer("english")  # -> "english_text"
-TantivyEx.Tokenizer.register_language_analyzer("french")   # -> "french_text"
-TantivyEx.Tokenizer.register_language_analyzer("german")   # -> "german_text"
-
-# Or just stemming
-TantivyEx.Tokenizer.register_stemming_tokenizer("spanish") # -> "spanish_stem"
-```
-
-**Supported languages**: English, French, German, Spanish, Italian, Portuguese, Russian, Arabic, Danish, Dutch, Finnish, Greek, Hungarian, Norwegian, Romanian, Swedish, Tamil, Turkish
+The `"raw"` tokenizer keeps the whole value as a single token, for exact
+matching (identifiers, codes). The [Tokenizers guide](docs/tokenizers.md)
+covers regex and n-gram tokenizers, languages and ASCII folding.
 
 ## Performance Tips
 
-1. **Use appropriate field options**: Only index fields you need to search
-2. **Leverage fast fields**: Use `:fast` for sorting and aggregations
-3. **Batch operations**: Commit documents in batches for better performance
-4. **Memory management**: Tune writer memory budget based on your use case
-5. **Choose optimal tokenizers**: Match tokenizers to your search requirements
-   - Use `"default"` for natural language content with stemming
-   - Use `"simple"` for structured data like product codes
-   - Use `"whitespace"` for tag fields and technical terms
-   - Use `"keyword"` for exact matching fields
-6. **Language-specific optimization**: Use language analyzers for better search quality
-7. **Register tokenizers once**: Call `register_default_tokenizers()` at application startup
+1. **Index only what you search**, and store only what you display
+2. **Use fast fields** (`:fast`, `:fast_stored`) for ranges, sorting and aggregations
+3. **Commit in batches**: a commit makes the documents searchable, and has a cost
+4. **Size the writer's memory budget** (`IndexWriter.new/2`, 50 MB by default) to your indexing volume
+5. **Register tokenizers once**, at application startup
 
 ## Examples
 
@@ -287,7 +183,7 @@ schema = TantivyEx.Schema.new()
 |> TantivyEx.Schema.add_json_field("metadata", :stored)
 ```
 
-### Development Setup
+## Development Setup
 
 ```bash
 git clone https://github.com/l-vincent-l/tantivy_ex.git
@@ -298,7 +194,7 @@ mix test
 
 ## License
 
-TantivyEx is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
+TantivyEx is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 

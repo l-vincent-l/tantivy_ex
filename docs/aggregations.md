@@ -45,7 +45,6 @@ price_histogram = %{
 - **[Search Guide](search.md)** - Understand how to combine search with aggregations
 - **[Search Results Guide](search_results.md)** - Process aggregation results effectively
 - **[Schema Design Guide](schema.md)** - Design schemas for optimal aggregation performance
-- **[Performance Tuning](performance-tuning.md)** - Optimize aggregation performance
 
 ## Table of Contents
 

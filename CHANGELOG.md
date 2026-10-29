@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The guides' examples run as tests** - `test/guides_test.exs` runs the Elixir blocks of each guide in order, as in an IEx session, and checks the `# => value` comments. The README and the Quick Start Tutorial are rewritten on the actual API: all 9 examples of the tutorial failed.
 - **Snippets with Tantivy's `SnippetGenerator`** - `TantivyEx.Searcher.snippet/5` returns the fragment of a text that best matches a query, with the byte ranges of the matched terms. Terms are matched with the field's tokenizer, as in the search, and the text does not need to be stored in the index.
 - **ASCII folding in text analyzers** - `TantivyEx.Tokenizer.register_text_analyzer/7` takes an `ascii_folding` flag (default `false`): accented characters are folded to ASCII after stemming, so that "ecole" matches "école".
 
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **The Performance Tuning, Production Deployment and Integration Patterns guides** - Mostly generic advice and architectures around calls to functions that did not exist; the useful advice is in the README.
 - **`Native.writer_add_document_batch/3`** - It had no caller: `Document.add_batch/4` adds each document.
 - **`"doc_id"` in search results, and `Searcher.search_ids/3`** - It was the id of the document in its segment, not in the index: two documents could share it, and no function took it. Identify documents with a field of their own.
 - **Placeholder modules** - These modules returned made-up values or did nothing, and are removed with their NIFs, tests and guide:
