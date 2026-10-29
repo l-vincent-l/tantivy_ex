@@ -95,6 +95,7 @@ defmodule TantivyEx.SearcherTest do
       assert {:ok, [result]} = Searcher.search(searcher, "bonjour", 10)
       assert is_float(result["score"])
       assert result["title"] == "Bonjour"
+      assert result["category"] == "/lang/fr"
       refute Map.has_key?(result, "doc_id")
 
       assert {:ok, [result]} = Searcher.search(searcher, "bonjour", 10, false)
@@ -116,6 +117,25 @@ defmodule TantivyEx.SearcherTest do
       assert result["tags"] == ["elixir", "search"]
       # A field with one value gives that value
       assert result["title"] == "Tagged"
+    end
+
+    test "give JSON objects as maps, and IPv4 addresses as such" do
+      schema =
+        Schema.new()
+        |> Schema.add_json_field("meta", :text_stored)
+        |> Schema.add_ip_addr_field("ip", :indexed_stored)
+
+      {:ok, index} = Index.create_in_ram(schema)
+      {:ok, writer} = IndexWriter.new(index, 50_000_000)
+      meta = %{"color" => "red", "size" => 3, "tags" => ["a", "b"]}
+      :ok = IndexWriter.add_document(writer, %{"meta" => meta, "ip" => "192.168.1.10"})
+      :ok = IndexWriter.commit(writer)
+      {:ok, searcher} = Searcher.new(index)
+
+      # JSON fields are indexed: their keys can be searched
+      assert {:ok, [result]} = Searcher.search(searcher, "meta.color:red", 10)
+      assert result["meta"] == meta
+      assert result["ip"] == "192.168.1.10"
     end
 
     test "return the error of a failing search", %{schema: schema, searcher: searcher} do

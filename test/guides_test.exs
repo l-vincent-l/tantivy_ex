@@ -17,6 +17,7 @@ defmodule TantivyEx.GuidesTest do
   @guides ~w(
     README.md
     docs/quick-start.md
+    docs/schema.md
   )
 
   for guide <- @guides do

@@ -757,9 +757,8 @@ fn convert_owned_value_to_json(value: &tantivy::schema::OwnedValue) -> JsonValue
         tantivy::schema::OwnedValue::I64(i) => json!(i),
         tantivy::schema::OwnedValue::F64(f) => json!(f),
         tantivy::schema::OwnedValue::Bool(b) => json!(b),
-        tantivy::schema::OwnedValue::Date(date) => {
-            json!(date.into_timestamp_nanos())
-        }
+        // As in search results
+        tantivy::schema::OwnedValue::Date(date) => json!(format!("{:?}", date)),
         tantivy::schema::OwnedValue::Facet(facet) => json!(facet.to_string()),
         tantivy::schema::OwnedValue::Bytes(bytes) => {
             // Encode bytes as base64
@@ -767,7 +766,10 @@ fn convert_owned_value_to_json(value: &tantivy::schema::OwnedValue) -> JsonValue
             json!(general_purpose::STANDARD.encode(bytes))
         }
         tantivy::schema::OwnedValue::PreTokStr(pre_tok_str) => json!(pre_tok_str.text),
-        tantivy::schema::OwnedValue::IpAddr(ip) => json!(ip.to_string()),
+        tantivy::schema::OwnedValue::IpAddr(ip) => match ip.to_ipv4_mapped() {
+            Some(ipv4) => json!(ipv4.to_string()),
+            None => json!(ip.to_string()),
+        },
         tantivy::schema::OwnedValue::Null => json!(null),
         tantivy::schema::OwnedValue::Array(array) => {
             let json_array: Vec<JsonValue> =

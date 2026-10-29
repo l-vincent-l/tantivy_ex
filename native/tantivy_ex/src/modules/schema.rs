@@ -212,8 +212,8 @@ pub fn schema_add_facet_field(
     let mut schema_builder = Schema::builder();
     copy_existing_fields_to_builder(&schema_res.schema, &mut schema_builder);
 
-    // Facet fields are always indexed and stored by default
-    let field_options = FacetOptions::default();
+    // Facet fields are always indexed; they are also stored, to be in the results
+    let field_options = FacetOptions::default().set_stored();
 
     schema_builder.add_facet_field(&field_name, field_options);
     let schema = schema_builder.build();
@@ -256,7 +256,10 @@ pub fn schema_add_json_field(
 
     let field_options = match options.as_str() {
         "STORED" => JsonObjectOptions::default().set_stored(),
-        _ => JsonObjectOptions::default(), // JSON fields are indexed by default
+        "TEXT_STORED" => JsonObjectOptions::default()
+            .set_indexing_options(text_indexing())
+            .set_stored(),
+        _ => JsonObjectOptions::default().set_indexing_options(text_indexing()),
     };
 
     schema_builder.add_json_field(&field_name, field_options);
