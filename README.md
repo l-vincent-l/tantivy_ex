@@ -20,7 +20,6 @@ TantivyEx provides a complete, type-safe interface to Tantivy - Rust's fastest f
 - **Flexible Storage**: In-memory or persistent disk-based indexes
 - **Type Safety**: Full Elixir typespecs and compile-time safety
 - **Advanced Aggregations**: Elasticsearch-compatible bucket aggregations (terms, histogram, date_histogram, range) and metric aggregations (avg, min, max, sum, stats, percentiles) with nested sub-aggregations
-- **Distributed Search**: Multi-node search coordination with load balancing, failover, and configurable result merging
 - **Search Features**: Full-text search, faceted search, range queries, and comprehensive analytics
 
 ## Quick Start
@@ -102,24 +101,6 @@ price_histogram = %{
   20  # search limit
 )
 
-# Distributed Search (New in v0.3.0)
-{:ok, _supervisor_pid} = TantivyEx.Distributed.OTP.start_link()
-
-# Add multiple search nodes for horizontal scaling
-:ok = TantivyEx.Distributed.OTP.add_node("node1", "http://localhost:9200", 1.0)
-:ok = TantivyEx.Distributed.OTP.add_node("node2", "http://localhost:9201", 1.5)
-
-# Configure distributed behavior
-:ok = TantivyEx.Distributed.OTP.configure(%{
-  timeout_ms: 5000,
-  max_retries: 3,
-  merge_strategy: :score_desc
-})
-
-# Perform distributed search
-{:ok, results} = TantivyEx.Distributed.OTP.search("search query", 10, 0)
-
-IO.puts("Found #{length(results)} hits across distributed nodes")
 ```
 
 ## Installation
@@ -170,7 +151,6 @@ TantivyEx requires:
 - **[Search Operations](docs/search.md)**: Query syntax, ranking, and search best practices
 - **[Search Results](docs/search_results.md)**: Result handling and formatting
 - **[Aggregations](docs/aggregations.md)**: Data analysis, bucket and metric aggregations, and analytics
-- **[Distributed Search](docs/otp-distributed-implementation.md)**: Multi-node coordination, load balancing, and horizontal scaling
 - **[Tokenizers](docs/tokenizers.md)**: Text analysis, custom tokenizers, and language support
 
 #### API Reference
@@ -263,11 +243,6 @@ TantivyEx.Tokenizer.register_stemming_tokenizer("spanish") # -> "spanish_stem"
    - Use `"keyword"` for exact matching fields
 6. **Language-specific optimization**: Use language analyzers for better search quality
 7. **Register tokenizers once**: Call `register_default_tokenizers()` at application startup
-8. **Distributed search optimization**:
-   - Weight nodes based on their actual capacity
-   - Use `"score_desc"` merge strategy for best relevance
-   - Monitor cluster health and adjust timeouts accordingly
-   - Consider `"health_based"` load balancing for production environments
 
 ## Examples
 
@@ -310,32 +285,6 @@ schema = TantivyEx.Schema.new()
 |> TantivyEx.Schema.add_ip_addr_field("client_ip", :indexed_stored)
 |> TantivyEx.Schema.add_date_field("timestamp", :fast_stored)
 |> TantivyEx.Schema.add_json_field("metadata", :stored)
-```
-
-### Distributed Search Setup
-
-```elixir
-# Multi-node search coordinator for horizontal scaling
-{:ok, _supervisor_pid} = TantivyEx.Distributed.OTP.start_link()
-
-# Add nodes with different weights based on capacity
-:ok = TantivyEx.Distributed.OTP.add_node("primary", "http://search1:9200", 2.0)
-:ok = TantivyEx.Distributed.OTP.add_node("secondary", "http://search2:9200", 1.5)
-:ok = TantivyEx.Distributed.OTP.add_node("backup", "http://search3:9200", 1.0)
-
-# Configure for production use
-:ok = TantivyEx.Distributed.OTP.configure(%{
-  timeout_ms: 10_000,
-  max_retries: 3,
-  merge_strategy: :score_desc
-})
-
-# Perform distributed search
-{:ok, results} = TantivyEx.Distributed.OTP.search("search query", 50, 0)
-
-# Monitor cluster health
-{:ok, cluster_stats} = TantivyEx.Distributed.OTP.get_cluster_stats()
-IO.puts("Active nodes: #{cluster_stats.active_nodes}/#{cluster_stats.total_nodes}")
 ```
 
 ### Development Setup

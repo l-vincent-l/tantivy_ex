@@ -18,6 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Fork metadata** - Version 0.6.0 (0.5.0 is a tag of another fork), and the source URL, documentation links and README point at the fork, which is installed from GitHub. The Mix `rustler` requirement is relaxed to `~> 0.36`.
 - **Tantivy 0.26** - Upgraded from 0.24. The index format is unchanged (version 7), so existing indexes still open. Aggregations parsing a query string use the searched index's tokenizers.
 
+### Removed
+
+- **Placeholder modules** - These modules returned made-up values or did nothing, and are removed with their NIFs, tests and guide:
+  - `TantivyEx.SpaceAnalysis`: hardcoded index size and segments.
+  - `TantivyEx.CustomCollector`: ignored the query and returned the same scores.
+  - `TantivyEx.MergePolicy`: `set_merge_policy/2` applied nothing.
+  - `TantivyEx.IndexWarming`: slept instead of warming, with a fixed searcher size.
+  - `TantivyEx.ReaderManager`: fixed memory usage, and most functions called NIFs that did not exist.
+  - `TantivyEx.Performance`: `optimize_index`, `compact_index` and `force_merge` only logged.
+  - `TantivyEx.Memory` and `TantivyEx.ResourceManager`: measured the BEAM's memory, not Tantivy's.
+  - `TantivyEx.Distributed.*`: the nodes ignored their endpoint and searched a 3-document demo index, all in the same VM; string searches crashed the node. Removed with the "OTP Distributed Search" guide.
+- The `:sasl` and `:os_mon` applications, which only `TantivyEx.Memory` used, and its configuration.
+
 ### Fixed
 
 - **Indexes use the registered tokenizers** - The tokenizers registered with `TantivyEx.Tokenizer` were kept in a global manager that no index received: a field using one (e.g. `fr_stem`) could not be indexed. Indexes created or opened now get them. `register_default_tokenizers/0` registers Tantivy's own `default` (lowercased, long words removed) and `raw` (the whole text as one token), so that it does not change the fields using them.
