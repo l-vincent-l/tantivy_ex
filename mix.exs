@@ -8,7 +8,7 @@ defmodule TantivyEx.MixProject do
     [
       app: :tantivy_ex,
       version: @version,
-      elixir: "~> 1.15",
+      elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
 
@@ -35,8 +35,7 @@ defmodule TantivyEx.MixProject do
   defp deps do
     [
       {:rustler, "~> 0.38", runtime: false},
-      {:ex_doc, "~> 0.29", only: :dev, runtime: false},
-      {:igniter, "~> 0.6", optional: true},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:jason, "~> 1.4"}
     ]
   end
@@ -76,7 +75,8 @@ defmodule TantivyEx.MixProject do
         "docs/schema.md",
         "docs/documents.md",
         "docs/indexing.md",
-        "docs/search.md",
+        # search.html is ExDoc's search page
+        {"docs/search.md", filename: "search-guide"},
         "docs/search_results.md",
         "docs/tokenizers.md",
         "docs/aggregations.md"

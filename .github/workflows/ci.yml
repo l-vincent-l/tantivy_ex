@@ -9,7 +9,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: erlef/mix-dependency-submission@v1
 
   mix_test:
@@ -22,18 +22,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - elixir: 1.15.8
-            otp: 25.3.2.9
+          - elixir: 1.17.3
+            otp: 27.3
 
-          - elixir: 1.18.3
-            otp: 27.2
+          - elixir: 1.20.4
+            otp: 29.1
             lint: true
 
     runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
@@ -48,7 +48,7 @@ jobs:
           components: clippy, rustfmt
 
       - name: Cache Rust dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -65,7 +65,7 @@ jobs:
           sudo apt-get install -y libclang-dev build-essential pkg-config
 
       - name: Restore deps and _build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             deps

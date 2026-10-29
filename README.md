@@ -60,7 +60,7 @@ end
 
 The NIF is compiled from source, which requires:
 
-- **Elixir** 1.15 or later
+- **Elixir** 1.17 or later, on **Erlang/OTP** 27 or later
 - **Rust** 1.91 or later
 
 ## Documentation

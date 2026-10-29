@@ -6,8 +6,8 @@ This guide walks you through installing and setting up TantivyEx in your Elixir 
 
 Before installing TantivyEx, ensure you have:
 
-- **Elixir 1.12+** and **Erlang/OTP 24+**
-- **Rust 1.70+** (for compiling the native library)
+- **Elixir 1.17+** and **Erlang/OTP 27+**
+- **Rust 1.91+** (for compiling the native library)
 - **Git** (for dependency management)
 
 ## Installation
