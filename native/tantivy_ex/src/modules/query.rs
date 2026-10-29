@@ -1,19 +1,17 @@
 use rustler::{NifResult, ResourceArc};
 use serde_json;
 use std::ops::Bound;
-use tantivy::query::Occur;
 use tantivy::query::{
-    AllQuery, BooleanQuery, EmptyQuery, ExistsQuery, FuzzyTermQuery, MoreLikeThisQuery,
-    PhrasePrefixQuery, PhraseQuery, QueryParser, RangeQuery, RegexQuery, TermQuery,
+    AllQuery, BooleanQuery, EmptyQuery, ExistsQuery, FuzzyTermQuery, MoreLikeThisQuery, Occur,
+    PhrasePrefixQuery, PhraseQuery, Query, QueryParser, RangeQuery, RegexQuery, TermQuery,
 };
-use tantivy::schema::{FieldType, OwnedValue};
-use tantivy::tokenizer::TokenStream;
+use tantivy::schema::{IndexRecordOption, OwnedValue};
 use tantivy::Term as TantivyTerm;
 
 use crate::modules::resources::{
-    IndexResource, QueryParserResource, QueryResource, SchemaResource,
+    error, IndexResource, QueryParserResource, QueryResource, SchemaResource,
 };
-use crate::modules::tokenizer::global_tokenizer_manager;
+use crate::modules::terms::{text_terms, text_tokenizer, value_terms};
 
 /// Query system functions
 
@@ -81,164 +79,51 @@ pub fn query_term(
     field_name: String,
     term_value: String,
 ) -> NifResult<ResourceArc<QueryResource>> {
-    let field = match schema_res.schema.get_field(&field_name) {
-        Ok(field) => field,
-        Err(_) => {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Field '{}' not found",
-                field_name
-            ))))
-        }
+    // Every term of the value must be in the field; a value without terms
+    // matches nothing
+    let (_field, terms) =
+        value_terms(&schema_res.schema, &field_name, &term_value).map_err(error)?;
+    let mut clauses: Vec<(Occur, Box<dyn Query>)> = terms
+        .into_iter()
+        .map(|term| {
+            let query: Box<dyn Query> = Box::new(TermQuery::new(term, IndexRecordOption::Basic));
+            (Occur::Must, query)
+        })
+        .collect();
+
+    let query: Box<dyn Query> = match clauses.len() {
+        0 => Box::new(EmptyQuery),
+        1 => clauses.pop().unwrap().1,
+        _ => Box::new(BooleanQuery::new(clauses)),
     };
-
-    let field_entry = schema_res.schema.get_field_entry(field);
-    let field_type = field_entry.field_type();
-
-    match field_type {
-        FieldType::Str(text_options) => {
-            let indexing = text_options.get_indexing_options().ok_or_else(|| {
-                rustler::Error::Term(Box::new(format!("Field '{}' is not indexed", field_name)))
-            })?;
-            let mut tokenizer = global_tokenizer_manager()
-                .get(indexing.tokenizer())
-                .ok_or_else(|| {
-                    rustler::Error::Term(Box::new(format!(
-                        "Tokenizer '{}' of field '{}' is not registered",
-                        indexing.tokenizer(),
-                        field_name
-                    )))
-                })?;
-
-            // The value is analyzed like the indexed text: each of its tokens
-            // must be in the field
-            let mut token_stream = tokenizer.token_stream(&term_value);
-            let mut clauses: Vec<(Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
-            while let Some(token) = token_stream.next() {
-                let term = TantivyTerm::from_field_text(field, &token.text);
-                let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-                clauses.push((Occur::Must, Box::new(query)));
-            }
-
-            let query: Box<dyn tantivy::query::Query> = match clauses.len() {
-                0 => Box::new(EmptyQuery),
-                1 => clauses.pop().unwrap().1,
-                _ => Box::new(BooleanQuery::new(clauses)),
-            };
-            Ok(ResourceArc::new(QueryResource { query }))
-        }
-        FieldType::U64(_) => {
-            let term = match term_value.parse::<u64>() {
-                Ok(val) => TantivyTerm::from_field_u64(field, val),
-                Err(_) => {
-                    return Err(rustler::Error::Term(Box::new(format!(
-                        "Invalid u64 value for field '{}': {:?}",
-                        field_name, term_value
-                    ))))
-                }
-            };
-            let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-            Ok(ResourceArc::new(QueryResource {
-                query: Box::new(query),
-            }))
-        }
-        FieldType::I64(_) => {
-            let term = match term_value.parse::<i64>() {
-                Ok(val) => TantivyTerm::from_field_i64(field, val),
-                Err(_) => {
-                    return Err(rustler::Error::Term(Box::new(format!(
-                        "Invalid i64 value for field '{}': {:?}",
-                        field_name, term_value
-                    ))))
-                }
-            };
-            let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-            Ok(ResourceArc::new(QueryResource {
-                query: Box::new(query),
-            }))
-        }
-        FieldType::F64(_) => {
-            let term = match term_value.parse::<f64>() {
-                Ok(val) => TantivyTerm::from_field_f64(field, val),
-                Err(_) => {
-                    return Err(rustler::Error::Term(Box::new(format!(
-                        "Invalid f64 value for field '{}': {:?}",
-                        field_name, term_value
-                    ))))
-                }
-            };
-            let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-            Ok(ResourceArc::new(QueryResource {
-                query: Box::new(query),
-            }))
-        }
-        FieldType::Bool(_) => {
-            // Be more lenient with boolean parsing
-            let term_lower = term_value.to_lowercase();
-            let term = match term_lower.as_str() {
-                "true" | "t" | "1" | "yes" | "y" => TantivyTerm::from_field_bool(field, true),
-                "false" | "f" | "0" | "no" | "n" => TantivyTerm::from_field_bool(field, false),
-                _ => {
-                    return Err(rustler::Error::Term(Box::new(format!(
-                        "Invalid boolean value for field '{}': {:?}",
-                        field_name, term_value
-                    ))))
-                }
-            };
-            let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-            Ok(ResourceArc::new(QueryResource {
-                query: Box::new(query),
-            }))
-        }
-        FieldType::Date(_) => {
-            let term = match term_value.parse::<i64>() {
-                Ok(timestamp) => {
-                    let date_time = tantivy::DateTime::from_timestamp_secs(timestamp);
-                    TantivyTerm::from_field_date(field, date_time)
-                }
-                Err(_) => {
-                    return Err(rustler::Error::Term(Box::new(format!(
-                        "Invalid timestamp value for date field '{}': {:?}",
-                        field_name, term_value
-                    ))))
-                }
-            };
-            let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-            Ok(ResourceArc::new(QueryResource {
-                query: Box::new(query),
-            }))
-        }
-        _ => Err(rustler::Error::Term(Box::new(format!(
-            "Unsupported field type for term query on field '{}': {:?}",
-            field_name, field_type
-        )))),
-    }
+    Ok(ResourceArc::new(QueryResource { query }))
 }
 
+/// A phrase query: the words, each analyzed with the field's tokenizer, in
+/// this order.
 #[rustler::nif]
 pub fn query_phrase(
     schema_res: ResourceArc<SchemaResource>,
     field_name: String,
     phrase_terms: Vec<String>,
 ) -> NifResult<ResourceArc<QueryResource>> {
-    let field = match schema_res.schema.get_field(&field_name) {
-        Ok(field) => field,
-        Err(_) => {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Field '{}' not found",
-                field_name
-            ))))
-        }
+    let schema = &schema_res.schema;
+    let field = schema
+        .get_field(&field_name)
+        .map_err(|_| error(format!("Field '{}' not found", field_name)))?;
+    let tokenizer = text_tokenizer(schema, field, &field_name).map_err(error)?;
+
+    let mut terms = Vec::new();
+    for word in &phrase_terms {
+        terms.extend(text_terms(field, &field_name, &tokenizer, word).map_err(error)?);
+    }
+
+    let query: Box<dyn Query> = match terms.len() {
+        0 => Box::new(EmptyQuery),
+        1 => Box::new(TermQuery::new(terms.remove(0), IndexRecordOption::Basic)),
+        _ => Box::new(PhraseQuery::new(terms)),
     };
-
-    let terms: Vec<TantivyTerm> = phrase_terms
-        .iter()
-        .map(|term_str| TantivyTerm::from_field_text(field, term_str))
-        .collect();
-
-    let query = PhraseQuery::new(terms);
-    Ok(ResourceArc::new(QueryResource {
-        query: Box::new(query),
-    }))
+    Ok(ResourceArc::new(QueryResource { query }))
 }
 
 #[rustler::nif]
@@ -358,6 +243,8 @@ pub fn query_boolean(
     }))
 }
 
+/// A fuzzy query: the word, analyzed with the field's tokenizer (lowercased by
+/// most), within `distance` edits.
 #[rustler::nif]
 pub fn query_fuzzy(
     schema_res: ResourceArc<SchemaResource>,
@@ -366,18 +253,22 @@ pub fn query_fuzzy(
     distance: u8,
     prefix: bool,
 ) -> NifResult<ResourceArc<QueryResource>> {
-    let field = match schema_res.schema.get_field(&field_name) {
-        Ok(field) => field,
-        Err(_) => {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Field '{}' not found",
-                field_name
-            ))))
-        }
-    };
+    let schema = &schema_res.schema;
+    let field = schema
+        .get_field(&field_name)
+        .map_err(|_| error(format!("Field '{}' not found", field_name)))?;
+    let tokenizer = text_tokenizer(schema, field, &field_name).map_err(error)?;
 
-    let term = TantivyTerm::from_field_text(field, &term_value);
-    let query = FuzzyTermQuery::new(term, distance, prefix);
+    let mut terms = text_terms(field, &field_name, &tokenizer, &term_value).map_err(error)?;
+    if terms.len() != 1 {
+        return Err(error(format!(
+            "A fuzzy query takes one word, {:?} gives {} terms",
+            term_value,
+            terms.len()
+        )));
+    }
+
+    let query = FuzzyTermQuery::new(terms.remove(0), distance, prefix);
     Ok(ResourceArc::new(QueryResource {
         query: Box::new(query),
     }))
@@ -410,52 +301,38 @@ pub fn query_regex(
     }
 }
 
+/// A wildcard query: `*` matches any characters, `?` one character, and the
+/// other characters themselves. The pattern is matched against the indexed
+/// terms, without analysis.
 #[rustler::nif]
 pub fn query_wildcard(
     schema_res: ResourceArc<SchemaResource>,
     field_name: String,
     pattern: String,
 ) -> NifResult<ResourceArc<QueryResource>> {
-    let field = match schema_res.schema.get_field(&field_name) {
-        Ok(field) => field,
-        Err(_) => {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Field '{}' not found",
-                field_name
-            ))))
-        }
-    };
+    let field = schema_res
+        .schema
+        .get_field(&field_name)
+        .map_err(|_| error(format!("Field '{}' not found", field_name)))?;
 
-    // Convert wildcard pattern to regex pattern
-    let regex_pattern = pattern.replace('*', ".*").replace('?', ".");
-
-    match RegexQuery::from_pattern(&regex_pattern, field) {
-        Ok(query) => Ok(ResourceArc::new(QueryResource {
-            query: Box::new(query),
-        })),
-        Err(e) => {
-            // Fall back to simple term query if regex fails
-            if pattern.ends_with('*')
-                && !pattern[..pattern.len() - 1].contains('*')
-                && !pattern.contains('?')
-            {
-                // Simple prefix query for patterns like "abc*"
-                let prefix = &pattern[..pattern.len() - 1];
-                let term_query = TermQuery::new(
-                    TantivyTerm::from_field_text(field, prefix),
-                    tantivy::schema::IndexRecordOption::WithFreqs,
-                );
-                Ok(ResourceArc::new(QueryResource {
-                    query: Box::new(term_query),
-                }))
-            } else {
-                Err(rustler::Error::Term(Box::new(format!(
-                    "Failed to create wildcard query: {}",
-                    e
-                ))))
+    let mut regex_pattern = String::new();
+    for c in pattern.chars() {
+        match c {
+            '*' => regex_pattern.push_str(".*"),
+            '?' => regex_pattern.push('.'),
+            c if "\\.+()|[]{}^$#&-~".contains(c) => {
+                regex_pattern.push('\\');
+                regex_pattern.push(c);
             }
+            c => regex_pattern.push(c),
         }
     }
+
+    let query = RegexQuery::from_pattern(&regex_pattern, field)
+        .map_err(|e| error(format!("Failed to create wildcard query: {}", e)))?;
+    Ok(ResourceArc::new(QueryResource {
+        query: Box::new(query),
+    }))
 }
 
 #[rustler::nif]
@@ -636,12 +513,9 @@ pub fn query_extract_terms(
 ) -> Vec<String> {
     // Extract terms using Tantivy's term extraction capability
     let mut term_set = std::collections::BTreeSet::new();
-    let mut found_any_terms = false;
 
     // Extract terms from the query
     query_res.query.query_terms(&mut |term, _need_position| {
-        found_any_terms = true;
-
         // Get the term's value and try different decoding methods
         let value = term.value();
 
@@ -680,15 +554,6 @@ pub fn query_extract_terms(
             }
         }
     });
-
-    // If no terms were found, it might indicate an issue with the query
-    if !found_any_terms {
-        return vec!["no_terms_found".to_string()];
-    }
-
-    if term_set.is_empty() {
-        return vec!["terms_found_but_not_decoded".to_string()];
-    }
 
     term_set.into_iter().collect()
 }

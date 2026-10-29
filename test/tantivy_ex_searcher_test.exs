@@ -139,8 +139,8 @@ defmodule TantivyEx.SearcherTest do
     end
 
     test "return the error of a failing search", %{schema: schema, searcher: searcher} do
-      # "id" has no positions: a phrase query on it fails
-      {:ok, query} = Query.phrase(schema, "id", ["1", "2"])
+      # An exists query needs a fast field: "title" is not one
+      {:ok, query} = Query.exists(schema, "title")
       assert {:error, _reason} = Searcher.search(searcher, query, 10)
     end
   end

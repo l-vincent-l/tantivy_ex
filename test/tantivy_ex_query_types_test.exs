@@ -345,4 +345,51 @@ defmodule TantivyEx.QueryTypesTest do
       assert reason =~ "Invalid u64 value"
     end
   end
+
+  describe "phrase, fuzzy and wildcard queries" do
+    setup do
+      schema =
+        Schema.new()
+        |> Schema.add_text_field("title", :text_stored)
+        |> Schema.add_text_field_with_tokenizer("sku", :text_stored, "raw")
+
+      {:ok, index} = Index.create_in_ram(schema)
+      {:ok, writer} = IndexWriter.new(index, 50_000_000)
+      :ok = IndexWriter.add_document(writer, %{"title" => "Hello World", "sku" => "abc"})
+      :ok = IndexWriter.add_document(writer, %{"title" => "Other", "sku" => "a.c"})
+      :ok = IndexWriter.commit(writer)
+      {:ok, searcher} = Searcher.new(index)
+      %{schema: schema, searcher: searcher}
+    end
+
+    defp titles(searcher, {:ok, query}) do
+      {:ok, results} = Searcher.search(searcher, query, 10)
+      results |> Enum.map(& &1["title"]) |> Enum.sort()
+    end
+
+    test "analyze the words with the field's tokenizer", %{schema: schema, searcher: searcher} do
+      assert titles(searcher, Query.phrase(schema, "title", ["Hello", "World"])) == [
+               "Hello World"
+             ]
+
+      assert titles(searcher, Query.phrase(schema, "title", ["Hello World"])) == ["Hello World"]
+      assert titles(searcher, Query.fuzzy(schema, "title", "HELO", 1)) == ["Hello World"]
+    end
+
+    test "a fuzzy query takes one word", %{schema: schema} do
+      assert {:error, reason} = Query.fuzzy(schema, "title", "hello world", 1)
+      assert reason =~ "takes one word"
+    end
+
+    test "wildcards match the other characters themselves", %{schema: schema, searcher: searcher} do
+      assert titles(searcher, Query.wildcard(schema, "sku", "a.c")) == ["Other"]
+      assert titles(searcher, Query.wildcard(schema, "sku", "a?c")) == ["Hello World", "Other"]
+      assert titles(searcher, Query.wildcard(schema, "sku", "ab*")) == ["Hello World"]
+    end
+
+    test "a query without terms has no terms to extract", %{schema: schema} do
+      {:ok, query} = Query.all()
+      assert TantivyEx.Native.query_extract_terms(query, schema) == []
+    end
+  end
 end
