@@ -13,21 +13,16 @@ pub struct FacetCollectorResource {
     pub collector: Mutex<FacetCollector>,
 }
 
-// Make FacetCollectorResource safe for concurrent access
-unsafe impl Send for FacetCollectorResource {}
-unsafe impl Sync for FacetCollectorResource {}
-impl std::panic::RefUnwindSafe for FacetCollectorResource {}
-impl std::panic::UnwindSafe for FacetCollectorResource {}
+#[rustler::resource_impl]
+impl rustler::Resource for FacetCollectorResource {}
 
 /// Resource for managing Facet state
 pub struct FacetResource {
     pub facet: Facet,
 }
 
-unsafe impl Send for FacetResource {}
-unsafe impl Sync for FacetResource {}
-impl std::panic::RefUnwindSafe for FacetResource {}
-impl std::panic::UnwindSafe for FacetResource {}
+#[rustler::resource_impl]
+impl rustler::Resource for FacetResource {}
 
 /// Creates a new facet collector for the specified field
 #[rustler::nif]
