@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The NIF is compiled from source** - The fork has no precompiled NIFs: `rustler_precompiled`, its checksum file and the release workflow are removed, as is the `TANTIVY_EX_BUILD` variable. The precompiled NIFs of the upstream package lacked the fork's functions, which failed with `nif_not_loaded`. Compiling requires a Rust toolchain.
+- **Fork metadata** - Version 0.6.0 (0.5.0 is a tag of another fork), and the source URL, documentation links and README point at the fork, which is installed from GitHub. The Mix `rustler` requirement is relaxed to `~> 0.36`.
 - **Tantivy 0.26** - Upgraded from 0.24. The index format is unchanged (version 7), so existing indexes still open. Aggregations parsing a query string use the searched index's tokenizers.
 
 ### Fixed
