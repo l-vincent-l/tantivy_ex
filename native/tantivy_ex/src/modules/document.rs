@@ -20,7 +20,7 @@ pub fn writer_add_document<'a>(
     writer_res: ResourceArc<IndexWriterResource>,
     document: rustler::Term<'a>,
 ) -> NifResult<Term<'a>> {
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
     let tantivy_doc = build_document(&writer.index().schema(), document)
         .map_err(|e| rustler::Error::Term(Box::new(e)))?;
 
@@ -38,7 +38,7 @@ pub fn writer_commit<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
 ) -> NifResult<Term<'a>> {
-    let mut writer = writer_res.writer.lock().unwrap();
+    let mut writer = writer_res.lock()?;
     match writer.commit() {
         Ok(_) => Ok(atoms::ok().encode(env)),
         Err(e) => Err(rustler::Error::Term(Box::new(format!(
@@ -55,7 +55,7 @@ pub fn writer_delete_documents<'a>(
     query_res: ResourceArc<QueryResource>,
 ) -> NifResult<Term<'a>> {
     // Get a reference to the writer
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
     let query = query_res.query.box_clone();
 
     // Delete documents matching the query
@@ -73,7 +73,7 @@ pub fn writer_delete_all_documents<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
 ) -> NifResult<Term<'a>> {
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
 
     match writer.delete_all_documents() {
         Ok(_) => Ok(atoms::ok().encode(env)),
@@ -89,7 +89,7 @@ pub fn writer_rollback<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
 ) -> NifResult<Term<'a>> {
-    let mut writer = writer_res.writer.lock().unwrap();
+    let mut writer = writer_res.lock()?;
 
     match writer.rollback() {
         Ok(_) => Ok(atoms::ok().encode(env)),
@@ -107,7 +107,7 @@ pub fn writer_delete_term<'a>(
     term_field: String,
     term_value: rustler::Term<'a>,
 ) -> NifResult<Term<'a>> {
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
     let schema = writer.index().schema();
 
     // Get the field from the schema
@@ -356,7 +356,7 @@ pub fn writer_add_document_with_schema<'a>(
 ) -> NifResult<Term<'a>> {
     let tantivy_doc = build_document(&schema_res.schema, document)
         .map_err(|e| rustler::Error::Term(Box::new(e)))?;
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
 
     match writer.add_document(tantivy_doc) {
         Ok(_) => Ok(atoms::ok().encode(env)),
@@ -375,7 +375,7 @@ pub fn writer_add_document_batch<'a>(
     schema_res: ResourceArc<SchemaResource>,
 ) -> NifResult<Term<'a>> {
     let schema = &schema_res.schema;
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
 
     let mut successful_count = 0;
     let mut errors = Vec::new();

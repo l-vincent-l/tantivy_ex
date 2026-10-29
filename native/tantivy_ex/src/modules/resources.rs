@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::panic::RefUnwindSafe;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use tantivy::schema::{OwnedValue, Schema};
 use tantivy::tokenizer::TokenizerManager;
 use tantivy::{query::QueryParser, Index, IndexWriter};
@@ -32,6 +32,18 @@ pub struct IndexWriterResource {
 
 #[rustler::resource_impl]
 impl rustler::Resource for IndexWriterResource {}
+
+impl IndexWriterResource {
+    /// Locks the writer. A panic while it was locked leaves it in an unknown
+    /// state: it is then an error to use it, instead of a panic in every call.
+    pub fn lock(&self) -> rustler::NifResult<MutexGuard<'_, IndexWriter>> {
+        self.writer.lock().map_err(|_| {
+            rustler::Error::Term(Box::new(
+                "The index writer is unusable: an operation panicked while using it".to_string(),
+            ))
+        })
+    }
+}
 
 pub struct SearcherResource {
     pub searcher: Arc<tantivy::Searcher>,
