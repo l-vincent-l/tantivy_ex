@@ -14,7 +14,11 @@ use crate::modules::resources::{
 
 /// Document operations and validation functions
 
-#[rustler::nif]
+// The NIFs locking the writer run on dirty IO schedulers: they wait for the
+// lock while another call holds it (a commit), and for Tantivy's indexing
+// queue when it is full. Waiting on normal schedulers would block the VM, and
+// on dirty CPU schedulers would take them from the searches.
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_add_document<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
@@ -48,7 +52,7 @@ pub fn writer_commit<'a>(
     }
 }
 
-#[rustler::nif(schedule = "DirtyCpu")]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_delete_documents<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
@@ -68,7 +72,7 @@ pub fn writer_delete_documents<'a>(
     }
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_delete_all_documents<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
@@ -84,7 +88,7 @@ pub fn writer_delete_all_documents<'a>(
     }
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_rollback<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
@@ -100,7 +104,7 @@ pub fn writer_rollback<'a>(
     }
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_delete_term<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
@@ -347,7 +351,7 @@ pub fn writer_delete_term<'a>(
     };
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_add_document_with_schema<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
@@ -367,7 +371,7 @@ pub fn writer_add_document_with_schema<'a>(
     }
 }
 
-#[rustler::nif(schedule = "DirtyCpu")]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_add_document_batch<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,

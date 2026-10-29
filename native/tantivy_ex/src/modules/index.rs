@@ -51,7 +51,7 @@ pub fn index_create_in_ram(
     Ok(index_resource(index))
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn index_writer(
     index_res: ResourceArc<IndexResource>,
     memory_budget: u64,
@@ -67,7 +67,7 @@ pub fn index_writer(
     }
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn index_reader<'a>(
     env: Env<'a>,
     index_res: ResourceArc<IndexResource>,

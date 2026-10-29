@@ -223,7 +223,7 @@ pub fn list_tokenizers() -> Vec<String> {
 }
 
 /// Test tokenization with a registered tokenizer
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyCpu")]
 pub fn tokenize_text(tokenizer_name: String, text: String) -> NifResult<Vec<String>> {
     match GLOBAL_TOKENIZER_MANAGER.get(&tokenizer_name) {
         Some(mut tokenizer) => {
