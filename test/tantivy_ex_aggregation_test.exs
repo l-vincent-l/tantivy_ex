@@ -525,7 +525,41 @@ defmodule TantivyEx.AggregationTest do
       }
 
       {:error, reason} = Aggregation.run(searcher, query, aggregations)
-      assert reason =~ "Unknown aggregation type"
+      assert reason =~ "unknown variant `unknown_type`"
+    end
+  end
+
+  describe "Tantivy's aggregations" do
+    test "date histograms take a fixed interval", %{searcher: searcher, query: query} do
+      aggregations = %{"by_week" => Aggregation.date_histogram("published_date", "7d")}
+
+      {:ok, %{"by_week" => %{"buckets" => buckets}}} =
+        Aggregation.run(searcher, query, aggregations)
+
+      assert Enum.sum(Enum.map(buckets, & &1["doc_count"])) == 6
+      assert Enum.all?(buckets, &is_binary(&1["key_as_string"]))
+    end
+
+    test "count gives the number of values", %{searcher: searcher, query: query} do
+      aggregations = %{"n" => Aggregation.metric(:count, "price")}
+      assert {:ok, %{"n" => %{"value" => 6.0}}} = Aggregation.run(searcher, query, aggregations)
+    end
+
+    test "keyed ranges give a map of buckets", %{searcher: searcher, query: query} do
+      ranges = [%{key: "cheap", to: 100.0}, %{key: "expensive", from: 100.0}]
+      aggregations = %{"prices" => Aggregation.range("price", ranges, keyed: true)}
+
+      {:ok, %{"prices" => %{"buckets" => buckets}}} =
+        Aggregation.run(searcher, query, aggregations)
+
+      assert Map.keys(buckets) |> Enum.sort() == ["cheap", "expensive"]
+    end
+
+    test "every Tantivy aggregation type is available", %{searcher: searcher, query: query} do
+      aggregations = %{"categories" => %{"cardinality" => %{"field" => "category"}}}
+
+      assert {:ok, %{"categories" => %{"value" => 2.0}}} =
+               Aggregation.run(searcher, query, aggregations)
     end
   end
 

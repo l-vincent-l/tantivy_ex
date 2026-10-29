@@ -67,7 +67,7 @@ defmodule TantivyEx.Aggregation do
         "sales_over_time" => %{
           "date_histogram" => %{
             "field" => "timestamp",
-            "calendar_interval" => "month"
+            "fixed_interval" => "30d"
           }
         }
       }
@@ -301,32 +301,31 @@ defmodule TantivyEx.Aggregation do
   ## Parameters
 
   - `field`: Date field name to aggregate on
-  - `interval`: Time interval (e.g., "day", "month", "year", "1h", "30m")
+  - `interval`: A fixed interval: a number and a unit among `ms`, `s`, `m`,
+    `h` and `d` (e.g. `"30m"`, `"1h"`, `"7d"`). Calendar intervals
+    (`"month"`, `"year"`) are not supported by Tantivy.
   - `options`: Date histogram aggregation options
 
   ## Options
 
-  - `:min_doc_count` - Minimum document count for buckets (default: 1)
-  - `:keyed` - Return buckets as a map instead of array (default: false)
-  - `:time_zone` - Time zone for bucket calculation
+  - `:min_doc_count` - Minimum document count for buckets (default: 0)
+  - `:offset` - Shift of the bucket boundaries (e.g. `"-2h"`)
+  - `:keyed` - Return buckets as a map instead of a list (default: false)
   - `:format` - Date format for bucket keys
 
   ## Examples
 
-      date_hist = Aggregation.date_histogram("timestamp", "month")
-      # Returns: %{"date_histogram" => %{"field" => "timestamp", "calendar_interval" => "month"}}
-
-      hourly_hist = Aggregation.date_histogram("created_at", "1h", time_zone: "America/New_York")
+      date_hist = Aggregation.date_histogram("timestamp", "7d")
+      # Returns: %{"date_histogram" => %{"field" => "timestamp", "fixed_interval" => "7d"}}
   """
   @spec date_histogram(String.t(), String.t(), keyword()) :: map()
   def date_histogram(field, interval, options \\ []) do
     base_config = %{
       "field" => field,
-      "calendar_interval" => interval
+      "fixed_interval" => interval
     }
 
-    config =
-      add_optional_params(base_config, options, [:min_doc_count, :keyed, :time_zone, :format])
+    config = add_optional_params(base_config, options, [:min_doc_count, :offset, :keyed, :format])
 
     %{"date_histogram" => config}
   end
@@ -431,7 +430,9 @@ defmodule TantivyEx.Aggregation do
   def metric(type, field, options) when type in [:avg, :min, :max, :sum, :count, :stats] do
     base_config = %{"field" => field}
     config = add_optional_params(base_config, options, [:missing])
-    %{Atom.to_string(type) => config}
+    # Tantivy's name of a count of values
+    name = if type == :count, do: "value_count", else: Atom.to_string(type)
+    %{name => config}
   end
 
   @doc """
@@ -521,66 +522,17 @@ defmodule TantivyEx.Aggregation do
     {:error, "Aggregations must be a map"}
   end
 
+  # The aggregation types and their parameters are validated by Tantivy
   defp validate_single_aggregation(agg_def) do
-    # Find aggregation type (skip 'aggs' and 'aggregations' keys)
-    agg_types = Map.keys(agg_def) -- ["aggs", "aggregations"]
-
-    case agg_types do
-      [] ->
-        throw({:error, "No aggregation type found in definition"})
-
-      [agg_type] ->
-        validate_aggregation_type(agg_type, Map.get(agg_def, agg_type))
-
-      multiple ->
-        throw({:error, "Multiple aggregation types found: #{inspect(multiple)}"})
-    end
-
-    # Validate sub-aggregations if present
-    if sub_aggs = agg_def["aggs"] || agg_def["aggregations"] do
-      validate_aggregation_structure(sub_aggs)
-    end
-  end
-
-  defp validate_aggregation_type(type, config)
-       when type in ["terms", "histogram", "date_histogram", "range"] do
-    unless Map.has_key?(config, "field") do
-      throw({:error, "#{type} aggregation requires 'field' parameter"})
-    end
-
-    case type do
-      "histogram" ->
-        unless Map.has_key?(config, "interval") do
-          throw({:error, "histogram aggregation requires 'interval' parameter"})
-        end
-
-      "date_histogram" ->
-        unless Map.has_key?(config, "calendar_interval") or Map.has_key?(config, "fixed_interval") do
-          throw(
-            {:error,
-             "date_histogram aggregation requires 'calendar_interval' or 'fixed_interval' parameter"}
-          )
-        end
-
-      "range" ->
-        unless Map.has_key?(config, "ranges") and is_list(config["ranges"]) do
-          throw({:error, "range aggregation requires 'ranges' parameter as a list"})
-        end
-
-      _ ->
+    case agg_def["aggs"] || agg_def["aggregations"] do
+      nil ->
         :ok
-    end
-  end
 
-  defp validate_aggregation_type(type, config)
-       when type in ["avg", "min", "max", "sum", "count", "stats", "percentiles"] do
-    unless Map.has_key?(config, "field") do
-      throw({:error, "#{type} aggregation requires 'field' parameter"})
+      sub_aggregations ->
+        with {:error, reason} <- validate_aggregation_structure(sub_aggregations) do
+          throw({:error, reason})
+        end
     end
-  end
-
-  defp validate_aggregation_type(type, _config) do
-    throw({:error, "Unknown aggregation type: #{type}"})
   end
 
   defp encode_aggregations(aggregations) do

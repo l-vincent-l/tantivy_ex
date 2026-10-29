@@ -4,7 +4,7 @@ use tantivy::collector::TopDocs;
 use tantivy::query::{Query, QueryParser};
 use tantivy::schema::{Facet, FieldType, Value};
 use tantivy::snippet::SnippetGenerator;
-use tantivy::{Searcher, TantivyDocument};
+use tantivy::{DocAddress, Score, Searcher, TantivyDocument};
 
 use crate::modules::resources::{QueryResource, SearcherResource};
 
@@ -83,6 +83,17 @@ fn search_results<'a>(
         .search(query, &top_docs)
         .map_err(|e| rustler::Error::Term(Box::new(format!("Search failed: {}", e))))?;
 
+    encode_hits(env, searcher, docs, include_docs)
+}
+
+/// The hits as maps with their `"score"` and, with `include_docs`, their
+/// stored fields.
+pub fn encode_hits<'a>(
+    env: Env<'a>,
+    searcher: &Searcher,
+    docs: Vec<(Score, DocAddress)>,
+    include_docs: bool,
+) -> NifResult<Term<'a>> {
     let mut results = Vec::new();
 
     for (score, doc_address) in docs {
