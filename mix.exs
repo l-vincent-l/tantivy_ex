@@ -1,8 +1,8 @@
 defmodule TantivyEx.MixProject do
   use Mix.Project
 
-  @version "0.4.1"
-  @source_url "https://github.com/alexiob/tantivy_ex"
+  @version "0.6.0"
+  @source_url "https://github.com/l-vincent-l/tantivy_ex"
 
   def project do
     [
@@ -10,7 +10,6 @@ defmodule TantivyEx.MixProject do
       version: @version,
       elixir: "~> 1.15",
       start_permanent: Mix.env() == :prod,
-      rustler_crates: rustler_crates(),
       deps: deps(),
 
       # Hex.pm package information
@@ -35,41 +34,11 @@ defmodule TantivyEx.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:rustler_precompiled, "~> 0.4"},
-      {:rustler, "~> 0.36.1", runtime: false, optional: true},
+      {:rustler, "~> 0.36", runtime: false},
       {:ex_doc, "~> 0.29", only: :dev, runtime: false},
       {:igniter, "~> 0.6", optional: true},
       {:jason, "~> 1.4"}
     ]
-  end
-
-  defp rustler_crates do
-    [
-      tantivy_ex: [
-        path: "native/tantivy_ex",
-        mode: rustler_mode(),
-        targets: [
-          # Linux
-          "aarch64-unknown-linux-gnu",
-          "arm-unknown-linux-gnueabihf",
-          "riscv64gc-unknown-linux-gnu",
-          "x86_64-unknown-linux-gnu",
-          # macOS
-          "aarch64-apple-darwin",
-          "x86_64-apple-darwin",
-          # Windows
-          "x86_64-pc-windows-gnu",
-          "x86_64-pc-windows-msvc"
-        ]
-      ]
-    ]
-  end
-
-  defp rustler_mode do
-    case Mix.env() do
-      :prod -> :release
-      _ -> :debug
-    end
   end
 
   defp description do
@@ -80,15 +49,13 @@ defmodule TantivyEx.MixProject do
     [
       name: "tantivy_ex",
       files:
-        ~w(lib priv native/tantivy_ex/src native/tantivy_ex/Cargo.toml native/tantivy_ex/Cargo.lock native/tantivy_ex/Cross.toml docs .formatter.exs mix.exs README* LICENSE* CHANGELOG* checksum-Elixir.TantivyEx.Native.exs),
+        ~w(lib priv native/tantivy_ex/src native/tantivy_ex/Cargo.toml native/tantivy_ex/Cargo.lock native/tantivy_ex/Cross.toml docs .formatter.exs mix.exs README* LICENSE* CHANGELOG*),
       licenses: ["MIT"],
       links: %{
         "GitHub" => @source_url,
         "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md",
         "Guides" => "#{@source_url}/tree/main/docs"
-      },
-      submitter: "alexiob",
-      maintainer: "alessandro@iob.dev"
+      }
     ]
   end
 

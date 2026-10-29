@@ -125,7 +125,7 @@ For development work on TantivyEx itself:
 
 ```bash
 # Clone the repository
-git clone https://github.com/alexiob/tantivy_ex.git
+git clone https://github.com/l-vincent-l/tantivy_ex.git
 cd tantivy_ex
 
 # Install dependencies

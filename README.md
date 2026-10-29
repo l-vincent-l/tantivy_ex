@@ -1,8 +1,6 @@
 # TantivyEx
 
-[![Elixir CI](https://github.com/alexiob/tantivy_ex/actions/workflows/ci.yml/badge.svg)](https://github.com/alexiob/tantivy_ex/actions)
-[![Hex Version](https://img.shields.io/hexpm/v/tantivy_ex.svg)](https://hex.pm/packages/tantivy_ex)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/tantivy_ex/)
+[![Elixir CI](https://github.com/l-vincent-l/tantivy_ex/actions/workflows/ci.yml/badge.svg)](https://github.com/l-vincent-l/tantivy_ex/actions)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ![TantivyEx Logo](assets/logo.png)
@@ -131,21 +129,12 @@ Add `tantivy_ex` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:tantivy_ex, "~> 0.4.1"}
+    {:tantivy_ex, github: "l-vincent-l/tantivy_ex"}
   ]
 end
 ```
 
-The package includes precompiled NIF files for common platforms, but will compile from source if needed.
-
-To force NIF compilation, set the `TANTIVY_EX_BUILD` environment variable to `true`:
-
-```bash
-export TANTIVY_EX_BUILD=true
-
-mix clean;
-mix compile;
-```
+The NIF is compiled from source, which requires a Rust toolchain.
 
 TantivyEx requires:
 
@@ -352,7 +341,7 @@ IO.puts("Active nodes: #{cluster_stats.active_nodes}/#{cluster_stats.total_nodes
 ### Development Setup
 
 ```bash
-git clone https://github.com/alexiob/tantivy_ex.git
+git clone https://github.com/l-vincent-l/tantivy_ex.git
 cd tantivy_ex
 mix deps.get
 mix test
