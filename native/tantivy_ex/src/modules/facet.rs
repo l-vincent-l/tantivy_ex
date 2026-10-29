@@ -6,7 +6,7 @@ use tantivy::query::{BooleanQuery, Occur};
 use tantivy::schema::Facet;
 use tantivy::Term as TantivyTerm;
 
-use crate::modules::resources::{QueryResource, SearcherResource};
+use crate::modules::resources::{json_to_term, QueryResource, SearcherResource};
 
 /// The field and facets of a FacetCollector, built for each search: the
 /// resource is not locked while searching.
@@ -65,11 +65,12 @@ pub fn facet_collector_add_facet(
 
 /// Performs a search with facet collection
 #[rustler::nif(schedule = "DirtyCpu")]
-pub fn facet_search(
+pub fn facet_search<'a>(
+    env: rustler::Env<'a>,
     searcher_res: ResourceArc<SearcherResource>,
     query_res: ResourceArc<QueryResource>,
     collector_res: ResourceArc<FacetCollectorResource>,
-) -> NifResult<String> {
+) -> NifResult<rustler::Term<'a>> {
     let mut collector = FacetCollector::for_field(&collector_res.field_name);
     let facets = collector_res
         .facets
@@ -94,13 +95,7 @@ pub fn facet_search(
                 insert_facet_hierarchically(&mut result, &facet_path, count);
             }
 
-            match serde_json::to_string(&result) {
-                Ok(json) => Ok(json),
-                Err(e) => Err(rustler::Error::Term(Box::new(format!(
-                    "Failed to serialize facet results: {}",
-                    e
-                )))),
-            }
+            Ok(json_to_term(env, &serde_json::Value::Object(result)))
         }
         Err(e) => Err(rustler::Error::Term(Box::new(format!(
             "Faceted search failed: {}",

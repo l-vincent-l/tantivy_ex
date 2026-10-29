@@ -99,14 +99,8 @@ defmodule TantivyEx.Facet do
   def search(searcher_ref, query_ref, collector_ref)
       when is_reference(searcher_ref) and is_reference(query_ref) and is_reference(collector_ref) do
     case Native.facet_search(searcher_ref, query_ref, collector_ref) do
-      results_json when is_binary(results_json) ->
-        case Jason.decode(results_json) do
-          {:ok, results} -> {:ok, results}
-          {:error, _} -> {:error, "Failed to parse facet results"}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+      {:error, reason} -> {:error, reason}
+      results when is_map(results) -> {:ok, results}
     end
   end
 

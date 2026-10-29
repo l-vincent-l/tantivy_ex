@@ -1,4 +1,4 @@
-use rustler::{Encoder, Env, NifResult, ResourceArc, Term};
+use rustler::{Env, NifResult, ResourceArc, Term};
 use serde_json::{json, Map, Value as JsonValue};
 use std::collections::HashMap;
 use tantivy::aggregation::agg_req::{Aggregation, AggregationVariants, Aggregations};
@@ -16,7 +16,7 @@ use tantivy::schema::OwnedValue;
 use tantivy::schema::Schema;
 use tantivy::Searcher;
 
-use crate::modules::resources::{QueryResource, SearcherResource};
+use crate::modules::resources::{json_to_term, QueryResource, SearcherResource};
 
 #[derive(Debug, Clone)]
 pub struct AggregationRequest {
@@ -68,13 +68,23 @@ pub fn run_aggregations<'a>(
 ) -> NifResult<Term<'a>> {
     let aggregation_requests = match parse_aggregation_requests(&aggregations_json) {
         Ok(requests) => requests,
-        Err(e) => return Ok(format!("Error parsing aggregations: {}", e).encode(env)),
+        Err(e) => {
+            return Err(rustler::Error::Term(Box::new(format!(
+                "Error parsing aggregations: {}",
+                e
+            ))))
+        }
     };
 
     let tantivy_aggregations =
         match build_tantivy_aggregations(&aggregation_requests, searcher_res.searcher.schema()) {
             Ok(aggs) => aggs,
-            Err(e) => return Ok(format!("Error building aggregations: {}", e).encode(env)),
+            Err(e) => {
+                return Err(rustler::Error::Term(Box::new(format!(
+                    "Error building aggregations: {}",
+                    e
+                ))))
+            }
         };
 
     let collector = AggregationCollector::from_aggs(
@@ -86,12 +96,12 @@ pub fn run_aggregations<'a>(
         Ok(agg_result) => {
             let json_result =
                 convert_aggregation_result_to_json(&agg_result, &aggregation_requests);
-            match serde_json::to_string(&json_result) {
-                Ok(json_str) => Ok(json_str.encode(env)),
-                Err(e) => Ok(format!("Error serializing result: {}", e).encode(env)),
-            }
+            Ok(json_to_term(env, &json_result))
         }
-        Err(e) => Ok(format!("Error executing aggregations: {}", e).encode(env)),
+        Err(e) => Err(rustler::Error::Term(Box::new(format!(
+            "Error executing aggregations: {}",
+            e
+        )))),
     }
 }
 
@@ -107,13 +117,23 @@ pub fn run_search_with_aggregations<'a>(
 
     let aggregation_requests = match parse_aggregation_requests(&aggregations_json) {
         Ok(requests) => requests,
-        Err(e) => return Ok(format!("Error parsing aggregations: {}", e).encode(env)),
+        Err(e) => {
+            return Err(rustler::Error::Term(Box::new(format!(
+                "Error parsing aggregations: {}",
+                e
+            ))))
+        }
     };
 
     let tantivy_aggregations =
         match build_tantivy_aggregations(&aggregation_requests, searcher_res.searcher.schema()) {
             Ok(aggs) => aggs,
-            Err(e) => return Ok(format!("Error building aggregations: {}", e).encode(env)),
+            Err(e) => {
+                return Err(rustler::Error::Term(Box::new(format!(
+                    "Error building aggregations: {}",
+                    e
+                ))))
+            }
         };
 
     let agg_collector = AggregationCollector::from_aggs(
@@ -141,12 +161,27 @@ pub fn run_search_with_aggregations<'a>(
                     .doc::<tantivy::TantivyDocument>(doc_address)
                 {
                     Ok(doc) => {
+                        let mut multi_valued: Vec<&str> = Vec::new();
+                        // A field with several values gives a list of them
                         let mut doc_map = serde_json::Map::new();
                         for (field, field_value) in doc.field_values() {
                             let field_name = searcher_res.searcher.schema().get_field_name(field);
                             let owned_value: OwnedValue = field_value.into();
                             let value = convert_owned_value_to_json(&owned_value);
-                            doc_map.insert(field_name.to_string(), value);
+                            match doc_map.get_mut(field_name) {
+                                Some(JsonValue::Array(values))
+                                    if multi_valued.contains(&field_name) =>
+                                {
+                                    values.push(value)
+                                }
+                                Some(previous) => {
+                                    *previous = JsonValue::Array(vec![previous.take(), value]);
+                                    multi_valued.push(field_name);
+                                }
+                                None => {
+                                    doc_map.insert(field_name.to_string(), value);
+                                }
+                            }
                         }
                         hits.push(JsonValue::Object(doc_map));
                     }
@@ -167,12 +202,12 @@ pub fn run_search_with_aggregations<'a>(
                 "aggregations": agg_json
             });
 
-            match serde_json::to_string(&combined_result) {
-                Ok(json_str) => Ok(json_str.encode(env)),
-                Err(e) => Ok(format!("Error serializing combined result: {}", e).encode(env)),
-            }
+            Ok(json_to_term(env, &combined_result))
         }
-        Err(e) => Ok(format!("Error executing search with aggregations: {}", e).encode(env)),
+        Err(e) => Err(rustler::Error::Term(Box::new(format!(
+            "Error executing search with aggregations: {}",
+            e
+        )))),
     }
 }
 

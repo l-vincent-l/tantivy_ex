@@ -390,6 +390,34 @@ defmodule TantivyEx.AggregationTest do
   end
 
   describe "search with aggregations" do
+    test "gives every value of a multi-valued field in the hits" do
+      schema =
+        Schema.new()
+        |> Schema.add_text_field("tags", :text_stored)
+        |> Schema.add_u64_field("price", :fast_stored)
+
+      {:ok, index} = Index.create_in_ram(schema)
+      {:ok, writer} = IndexWriter.new(index, 50_000_000)
+      :ok = IndexWriter.add_document(writer, %{"tags" => ["a", "b"], "price" => 10})
+      :ok = IndexWriter.commit(writer)
+      {:ok, searcher} = Searcher.new(index)
+      {:ok, query} = Query.all()
+
+      aggregations = %{"avg_price" => Aggregation.metric(:avg, "price")}
+      {:ok, result} = Aggregation.search_with_aggregations(searcher, query, aggregations, 10)
+
+      assert %{"hits" => %{"hits" => [%{"tags" => ["a", "b"], "price" => 10}]}} = result
+    end
+
+    test "returns the error of an aggregation on an unknown field", %{
+      searcher: searcher,
+      query: query
+    } do
+      aggregations = %{"avg" => Aggregation.metric(:avg, "nope")}
+      assert {:error, reason} = Aggregation.run(searcher, query, aggregations)
+      assert is_binary(reason)
+    end
+
     test "combined search and aggregations", %{searcher: searcher, query: query} do
       aggregations = %{
         "categories" => Aggregation.terms("category"),

@@ -70,9 +70,6 @@ defmodule TantivyEx.Native do
   def writer_add_document_with_schema(_writer, _document, _schema),
     do: :erlang.nif_error(:nif_not_loaded)
 
-  def writer_add_document_batch(_writer, _documents, _schema),
-    do: :erlang.nif_error(:nif_not_loaded)
-
   def validate_document_against_schema(_document, _schema), do: :erlang.nif_error(:nif_not_loaded)
 
   # Search functions
