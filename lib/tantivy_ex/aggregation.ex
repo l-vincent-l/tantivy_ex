@@ -166,8 +166,7 @@ defmodule TantivyEx.Aggregation do
 
     with {:ok, validated_aggs} <- validate_aggregations(aggregations, opts),
          {:ok, json_request} <- encode_aggregations(validated_aggs),
-         {:ok, json_response} <- run_native_aggregations(searcher, query, json_request),
-         {:ok, result} <- decode_aggregation_result(json_response) do
+         {:ok, result} <- run_native_aggregations(searcher, query, json_request) do
       {:ok, result}
     else
       {:error, reason} -> {:error, reason}
@@ -227,9 +226,8 @@ defmodule TantivyEx.Aggregation do
 
     with {:ok, validated_aggs} <- validate_aggregations(aggregations, opts),
          {:ok, json_request} <- encode_aggregations(validated_aggs),
-         {:ok, json_response} <-
-           run_native_search_with_aggregations(searcher, query, json_request, search_limit),
-         {:ok, result} <- decode_search_with_aggregations_result(json_response) do
+         {:ok, result} <-
+           run_native_search_with_aggregations(searcher, query, json_request, search_limit) do
       {:ok, result}
     else
       {:error, reason} -> {:error, reason}
@@ -592,48 +590,17 @@ defmodule TantivyEx.Aggregation do
     end
   end
 
-  defp decode_aggregation_result(json_response) do
-    case Jason.decode(json_response) do
-      {:ok, result} -> {:ok, result}
-      {:error, reason} -> {:error, "Failed to decode aggregation result: #{inspect(reason)}"}
-    end
-  end
-
-  defp decode_search_with_aggregations_result(json_response) do
-    case Jason.decode(json_response) do
-      {:ok, result} ->
-        {:ok, result}
-
-      {:error, reason} ->
-        {:error, "Failed to decode search with aggregations result: #{inspect(reason)}"}
-    end
-  end
-
   defp run_native_aggregations(searcher, query, json_request) do
     case Native.run_aggregations(searcher, query, json_request) do
-      result when is_binary(result) ->
-        if String.starts_with?(result, "Error") do
-          {:error, result}
-        else
-          {:ok, result}
-        end
-
-      error ->
-        {:error, "Native aggregation call failed: #{inspect(error)}"}
+      {:error, reason} -> {:error, reason}
+      result when is_map(result) -> {:ok, result}
     end
   end
 
   defp run_native_search_with_aggregations(searcher, query, json_request, search_limit) do
     case Native.run_search_with_aggregations(searcher, query, json_request, search_limit) do
-      result when is_binary(result) ->
-        if String.starts_with?(result, "Error") do
-          {:error, result}
-        else
-          {:ok, result}
-        end
-
-      error ->
-        {:error, "Native search with aggregations call failed: #{inspect(error)}"}
+      {:error, reason} -> {:error, reason}
+      result when is_map(result) -> {:ok, result}
     end
   end
 

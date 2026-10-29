@@ -128,19 +128,9 @@ defmodule TantivyEx.QueryTypesTest do
       assert is_list(results)
     end
 
-    test "handles invalid range (start > end)", %{schema: schema} do
-      # This should either create a valid empty range or return error
-      result = Query.range_u64(schema, "price", 300, 200)
-
-      case result do
-        {:ok, query} ->
-          # Valid empty range query
-          assert is_reference(query)
-
-        {:error, reason} ->
-          # Error is also acceptable
-          assert is_binary(reason)
-      end
+    test "an empty range (start > end) matches nothing", %{schema: schema, searcher: searcher} do
+      assert {:ok, query} = Query.range_u64(schema, "price", 300, 200)
+      assert {:ok, []} = Searcher.search(searcher, query, 10)
     end
   end
 
@@ -297,6 +287,62 @@ defmodule TantivyEx.QueryTypesTest do
       assert {:ok, query} = Query.empty()
       assert {:ok, results} = Searcher.search(searcher, query, 10, true)
       assert is_list(results)
+    end
+  end
+
+  describe "term queries analyze the value with the field's tokenizer" do
+    setup do
+      schema =
+        Schema.new()
+        |> Schema.add_text_field("title", :text_stored)
+        |> Schema.add_text_field_with_tokenizer("body", :text_stored, "en_stem")
+        |> Schema.add_text_field_with_tokenizer("sku", :text_stored, "raw")
+        |> Schema.add_u64_field("id", :indexed_stored)
+
+      {:ok, index} = Index.create_in_ram(schema)
+      {:ok, writer} = IndexWriter.new(index, 50_000_000)
+
+      :ok =
+        IndexWriter.add_document(writer, %{
+          "id" => 1,
+          "title" => "Hello World",
+          "body" => "The runners were running",
+          "sku" => "AB-12"
+        })
+
+      :ok = IndexWriter.commit(writer)
+      {:ok, searcher} = Searcher.new(index)
+      %{schema: schema, searcher: searcher}
+    end
+
+    defp count(searcher, {:ok, query}) do
+      {:ok, results} = Searcher.search(searcher, query, 10)
+      length(results)
+    end
+
+    test "lowercased by the default tokenizer", %{schema: schema, searcher: searcher} do
+      assert count(searcher, Query.term(schema, "title", "HELLO")) == 1
+      # Every word is required
+      assert count(searcher, Query.term(schema, "title", "hello world")) == 1
+      assert count(searcher, Query.term(schema, "title", "hello there")) == 0
+    end
+
+    test "stemmed by a stemming tokenizer", %{schema: schema, searcher: searcher} do
+      assert count(searcher, Query.term(schema, "body", "runs")) == 1
+    end
+
+    test "kept as is by the raw tokenizer", %{schema: schema, searcher: searcher} do
+      assert count(searcher, Query.term(schema, "sku", "AB-12")) == 1
+      assert count(searcher, Query.term(schema, "sku", "ab-12")) == 0
+    end
+
+    test "without tokens, matches nothing", %{schema: schema, searcher: searcher} do
+      assert count(searcher, Query.term(schema, "title", "  ")) == 0
+    end
+
+    test "an invalid number is an error", %{schema: schema} do
+      assert {:error, reason} = Query.term(schema, "id", "one")
+      assert reason =~ "Invalid u64 value"
     end
   end
 end

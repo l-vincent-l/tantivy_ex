@@ -590,10 +590,10 @@ defmodule TantivyEx.SearchResultsTest do
       assert is_list(processed)
     end
 
-    test "handles aggregation errors gracefully" do
-      {:error, reason} = SearchResults.aggregate("not_a_list", ["field"])
-      assert is_binary(reason)
-      assert String.contains?(reason, "Failed to aggregate results")
+    test "raises on results that are not a list" do
+      assert_raise FunctionClauseError, fn ->
+        SearchResults.aggregate("not_a_list", ["field"])
+      end
     end
   end
 

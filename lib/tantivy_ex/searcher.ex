@@ -41,8 +41,6 @@ defmodule TantivyEx.Searcher do
       {:error, reason} -> {:error, reason}
       searcher -> {:ok, searcher}
     end
-  rescue
-    e -> {:error, "Failed to create searcher: #{inspect(e)}"}
   end
 
   @doc """
@@ -86,16 +84,12 @@ defmodule TantivyEx.Searcher do
     searcher
     |> Native.searcher_search(query, [], limit, include_docs)
     |> search_result()
-  rescue
-    e -> {:error, "Failed to search: #{inspect(e)}"}
   end
 
   def search(searcher, query, limit, include_docs) when is_reference(query) do
     searcher
     |> Native.searcher_search_with_query(query, limit, include_docs)
     |> search_result()
-  rescue
-    e -> {:error, "Failed to search with query: #{inspect(e)}"}
   end
 
   @doc """
@@ -137,8 +131,6 @@ defmodule TantivyEx.Searcher do
       {:error, reason} -> {:error, reason}
       {fragment, highlighted} -> {:ok, %{fragment: fragment, highlighted: highlighted}}
     end
-  rescue
-    e -> {:error, "Failed to generate snippet: #{inspect(e)}"}
   end
 
   @doc """
@@ -193,8 +185,6 @@ defmodule TantivyEx.Searcher do
     searcher
     |> Native.searcher_search(query_str, default_fields, limit, include_docs)
     |> search_result()
-  rescue
-    e -> {:error, "Failed to search: #{inspect(e)}"}
   end
 
   # The search NIFs return the results, or `{:error, reason}`

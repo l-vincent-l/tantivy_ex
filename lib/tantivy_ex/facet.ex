@@ -54,8 +54,6 @@ defmodule TantivyEx.Facet do
       {:error, reason} -> {:error, reason}
       collector_ref -> {:ok, collector_ref}
     end
-  rescue
-    e -> {:error, "Failed to create facet collector: #{inspect(e)}"}
   end
 
   @doc """
@@ -80,8 +78,6 @@ defmodule TantivyEx.Facet do
       :ok -> :ok
       {:error, reason} -> {:error, reason}
     end
-  rescue
-    e -> {:error, "Failed to add facet: #{inspect(e)}"}
   end
 
   @doc """
@@ -103,17 +99,9 @@ defmodule TantivyEx.Facet do
   def search(searcher_ref, query_ref, collector_ref)
       when is_reference(searcher_ref) and is_reference(query_ref) and is_reference(collector_ref) do
     case Native.facet_search(searcher_ref, query_ref, collector_ref) do
-      results_json when is_binary(results_json) ->
-        case Jason.decode(results_json) do
-          {:ok, results} -> {:ok, results}
-          {:error, _} -> {:error, "Failed to parse facet results"}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+      {:error, reason} -> {:error, reason}
+      results when is_map(results) -> {:ok, results}
     end
-  rescue
-    e -> {:error, "Failed to perform faceted search: #{inspect(e)}"}
   end
 
   @doc """
@@ -197,8 +185,6 @@ defmodule TantivyEx.Facet do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create facet term query: #{inspect(e)}"}
   end
 
   @doc """
@@ -233,8 +219,6 @@ defmodule TantivyEx.Facet do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create multi-facet query: #{inspect(e)}"}
   end
 
   @doc """
@@ -294,8 +278,6 @@ defmodule TantivyEx.Facet do
       {:error, reason} -> {:error, reason}
       facet_ref -> {:ok, facet_ref}
     end
-  rescue
-    e -> {:error, "Failed to create facet from text: #{inspect(e)}"}
   end
 
   @doc """
@@ -317,7 +299,5 @@ defmodule TantivyEx.Facet do
       {:error, reason} -> {:error, reason}
       facet_string -> {:ok, facet_string}
     end
-  rescue
-    e -> {:error, "Failed to convert facet to string: #{inspect(e)}"}
   end
 end

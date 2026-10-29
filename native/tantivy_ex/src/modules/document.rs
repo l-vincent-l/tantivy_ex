@@ -365,39 +365,6 @@ pub fn writer_add_document_with_schema<'a>(
     }
 }
 
-#[rustler::nif(schedule = "DirtyIo")]
-pub fn writer_add_document_batch<'a>(
-    env: Env<'a>,
-    writer_res: ResourceArc<IndexWriterResource>,
-    documents: Vec<rustler::Term<'a>>,
-    schema_res: ResourceArc<SchemaResource>,
-) -> NifResult<Term<'a>> {
-    let schema = &schema_res.schema;
-    let writer = writer_res.lock()?;
-
-    let mut successful_count = 0;
-    let mut errors = Vec::new();
-
-    for (index, document) in documents.into_iter().enumerate() {
-        match build_document(schema, document) {
-            Ok(tantivy_doc) => match writer.add_document(tantivy_doc) {
-                Ok(_) => successful_count += 1,
-                Err(e) => errors.push((index, format!("Failed to add document: {}", e))),
-            },
-            Err(e) => errors.push((index, e)),
-        }
-    }
-
-    // Return result summary
-    let result = format!(
-        "{{\"successful\": {}, \"errors\": {}}}",
-        successful_count,
-        errors.len()
-    );
-
-    Ok(result.encode(env))
-}
-
 #[rustler::nif]
 pub fn validate_document_against_schema<'a>(
     env: Env<'a>,

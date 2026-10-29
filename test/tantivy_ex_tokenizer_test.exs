@@ -2,7 +2,7 @@ defmodule TantivyExTokenizerTest do
   use ExUnit.Case, async: true
   require Logger
 
-  alias TantivyEx.{Native, Schema, Index}
+  alias TantivyEx.{Native, Schema, Index, IndexWriter}
 
   @moduletag :tokenizer
 
@@ -842,20 +842,22 @@ defmodule TantivyExTokenizerTest do
       {:ok, _index} = Index.create_in_ram(schema)
     end
 
-    test "add_text_field_with_tokenizer/4 with nonexistent tokenizer fails gracefully" do
-      schema = Schema.new()
+    test "add_text_field_with_tokenizer/4 with nonexistent tokenizer fails on commit" do
+      # The schema accepts the tokenizer name: it is looked up when indexing
+      schema =
+        Schema.add_text_field_with_tokenizer(
+          Schema.new(),
+          "field",
+          :text,
+          "nonexistent_tokenizer"
+        )
 
-      # This should not crash but may create a field that will error during indexing
-      result =
-        Schema.add_text_field_with_tokenizer(schema, "field", :text, "nonexistent_tokenizer")
+      {:ok, index} = Index.create_in_ram(schema)
+      {:ok, writer} = IndexWriter.new(index, 50_000_000)
+      :ok = IndexWriter.add_document(writer, %{"field" => "hello"})
 
-      # The schema creation might succeed, but indexing will fail
-      case result do
-        # Schema creation succeeded
-        schema when is_reference(schema) -> :ok
-        # Schema creation failed, which is also acceptable
-        {:error, _reason} -> :ok
-      end
+      assert {:error, reason} = IndexWriter.commit(writer)
+      assert reason =~ "Error getting tokenizer for field: field"
     end
   end
 
@@ -1069,16 +1071,8 @@ defmodule TantivyExTokenizerTest do
 
       Enum.each(unicode_texts, fn text ->
         Enum.each(tokenizers, fn tokenizer ->
-          case Native.tokenize_text(tokenizer, text) do
-            tokens when is_list(tokens) ->
-              assert is_list(tokens)
-
-            # Should handle unicode gracefully
-
-            {:error, _reason} ->
-              # Some tokenizers might not handle certain unicode, which is acceptable
-              :ok
-          end
+          tokens = Native.tokenize_text(tokenizer, text)
+          assert is_list(tokens) and tokens != [], "#{tokenizer}: #{inspect(tokens)}"
         end)
       end)
     end

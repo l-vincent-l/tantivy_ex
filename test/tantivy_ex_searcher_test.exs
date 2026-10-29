@@ -47,6 +47,16 @@ defmodule TantivyEx.SearcherTest do
     end
   end
 
+  describe "errors" do
+    test "a failure is an error tuple with the message", %{searcher: searcher} do
+      assert {:error, "Failed to parse query: " <> _} = Searcher.search(searcher, "nope:x")
+    end
+
+    test "an argument of the wrong type raises" do
+      assert_raise ArgumentError, fn -> Searcher.new("not an index") end
+    end
+  end
+
   describe "search_with_parser/5" do
     test "searches the given default fields", %{searcher: searcher} do
       assert {:ok, results} = Searcher.search_with_parser(searcher, ["body"], "hello")

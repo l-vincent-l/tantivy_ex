@@ -50,11 +50,13 @@ defmodule TantivyExFacetTest do
     {:ok, all_results} = Searcher.search(searcher, all_query, 10)
 
     IO.puts("All documents: #{length(all_results)}")
+
     if length(all_results) > 0 do
       result = List.first(all_results)
       IO.puts("First document fields: #{inspect(Map.keys(result))}")
       IO.puts("Title: #{result["title"]}")
       IO.puts("Tags field present: #{Map.has_key?(result, "tags")}")
+
       if Map.has_key?(result, "tags") do
         IO.puts("Tags value: #{inspect(result["tags"])}")
       end
@@ -80,6 +82,7 @@ defmodule TantivyExFacetTest do
     Enum.each(docs, fn doc ->
       :ok = IndexWriter.add_document(writer, doc)
     end)
+
     :ok = IndexWriter.commit(writer)
 
     # Search for documents with "elixir" tag

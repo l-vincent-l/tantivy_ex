@@ -1,3 +1,4 @@
+use rustler::{Encoder, Env, Term};
 use std::collections::BTreeMap;
 use std::panic::RefUnwindSafe;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -122,5 +123,38 @@ pub mod atoms {
         ok,
         error,
         nil,
+    }
+}
+
+/// Encodes a JSON value as Jason would decode it: maps with string keys,
+/// lists, integers, floats, strings, booleans and nil.
+pub fn json_to_term<'a>(env: Env<'a>, value: &serde_json::Value) -> Term<'a> {
+    match value {
+        serde_json::Value::Null => rustler::types::atom::nil().encode(env),
+        serde_json::Value::Bool(b) => b.encode(env),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                i.encode(env)
+            } else if let Some(u) = n.as_u64() {
+                u.encode(env)
+            } else {
+                n.as_f64().unwrap_or(0.0).encode(env)
+            }
+        }
+        serde_json::Value::String(s) => s.encode(env),
+        serde_json::Value::Array(values) => values
+            .iter()
+            .map(|v| json_to_term(env, v))
+            .collect::<Vec<_>>()
+            .encode(env),
+        serde_json::Value::Object(map) => {
+            let mut term = rustler::types::map::map_new(env);
+            for (key, v) in map {
+                if let Ok(updated) = term.map_put(key.encode(env), json_to_term(env, v)) {
+                    term = updated;
+                }
+            }
+            term
+        }
     }
 }

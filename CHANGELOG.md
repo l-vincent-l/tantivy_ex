@@ -22,9 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Searcher.search_with_parser/5`** - Takes the default fields without the schema: `search_with_parser(searcher, default_fields, query_str, limit, include_docs)`. It passed the schema where an index was expected, and always failed.
 - **rustler 0.38** - For the crate and the Mix package (`~> 0.38`), with `#[rustler::resource_impl]` instead of the `rustler::resource!` macro and its 14 compile warnings. The resources lose their `unsafe impl Send`/`Sync`: the compiler checks them.
 - **Dirty schedulers** - The NIFs locking the index writer (`add_document`, `delete_*`, `rollback`...), `index_writer` and `index_reader` run on dirty IO schedulers: they could block a BEAM scheduler while waiting for a commit or for Tantivy's indexing queue. `tokenize_text` runs on a dirty CPU scheduler.
+- **Errors** - The functions no longer rescue every exception into `{:error, "Failed to ...: %ArgumentError{...}"}`: a failure returns `{:error, message}` with the message of Tantivy or of the wrapper, and an argument of the wrong type raises, as is usual in Elixir.
+- **Aggregation and facet results are maps built in Rust** - They were serialized to JSON and decoded with Jason. Aggregation errors are `{:error, message}` tuples instead of strings starting with "Error".
 
 ### Removed
 
+- **`Native.writer_add_document_batch/3`** - It had no caller: `Document.add_batch/4` adds each document.
 - **`"doc_id"` in search results, and `Searcher.search_ids/3`** - It was the id of the document in its segment, not in the index: two documents could share it, and no function took it. Identify documents with a field of their own.
 - **Placeholder modules** - These modules returned made-up values or did nothing, and are removed with their NIFs, tests and guide:
   - `TantivyEx.SpaceAnalysis`: hardcoded index size and segments.
@@ -39,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`Query.term/3` on a text field analyzes the value with the field's tokenizer** - It lowercased the value and split it on spaces whatever the tokenizer: a stemmed field did not match inflected words, nor a `raw` or `whitespace` field the values with capitals. Every token of the value is required, as before. On a `u64` field, a value that is not a number is an error instead of a query matching nothing.
+- **Multi-valued fields in `Aggregation.search_with_aggregations/5`** - Its hits kept only the last value of a field.
 - **Poisoned locks** - After a panic while the index writer was locked, every later call on it panicked. They now return an error naming the writer. The tokenizer registry and the facet collectors stay usable after a panic, and a facet collector is no longer locked during a search.
 - **`Searcher.search/4` with a query string** - The string was ignored and every document matched. It is now parsed over the indexed text fields, with the index's tokenizers, and an invalid query is an error.
 - **Documents with invalid fields are rejected** - `IndexWriter.add_document/2` and `Document.add/3` skipped, without an error, an unknown field, a value of the wrong type (e.g. a negative integer for a `u64` field) or an invalid JSON object, and `Document.add_batch/4` skipped unknown fields. They now return an error naming the field. A list adds each of its values to a field, for every field type.

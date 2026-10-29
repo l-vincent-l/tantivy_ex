@@ -357,21 +357,17 @@ defmodule TantivyEx.Document do
   end
 
   def prepare_json(json_map, schema, field_mapping) when is_map(json_map) do
-    try do
-      prepared_doc = extract_fields_from_json(json_map, field_mapping)
+    prepared_doc = extract_fields_from_json(json_map, field_mapping)
 
-      case validate(prepared_doc, schema) do
-        {:ok, validated_doc} ->
-          case Jason.encode(validated_doc) do
-            {:ok, json_string} -> {:ok, json_string}
-            {:error, reason} -> {:error, "JSON encoding failed: #{inspect(reason)}"}
-          end
+    case validate(prepared_doc, schema) do
+      {:ok, validated_doc} ->
+        case Jason.encode(validated_doc) do
+          {:ok, json_string} -> {:ok, json_string}
+          {:error, reason} -> {:error, "JSON encoding failed: #{inspect(reason)}"}
+        end
 
-        {:error, reason} ->
-          {:error, reason}
-      end
-    rescue
-      e -> {:error, "JSON preparation failed: #{inspect(e)}"}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

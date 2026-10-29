@@ -20,8 +20,6 @@ defmodule TantivyEx.WrapperConcurrencyTest do
     Query
   }
 
-  alias TantivyEx.Native
-
   @test_timeout 20_000
 
   describe "wrapper function concurrent access" do
@@ -352,13 +350,9 @@ defmodule TantivyEx.WrapperConcurrencyTest do
 
       results = Task.await_many(cleanup_tasks, @test_timeout)
 
-      # Verify operations completed successfully
-      total_successful_tasks =
-        results
-        |> Enum.count(fn {_task_id, successful_ops} -> successful_ops >= 8 end)
-
-      assert total_successful_tasks >= 20,
-             "At least 20 tasks should have completed 8+ operations successfully"
+      # Every operation of every task succeeds
+      assert Enum.all?(results, fn {_task_id, successful_ops} -> successful_ops == 10 end),
+             "Failed operations: #{inspect(results)}"
 
       # Force garbage collection to test cleanup
       :erlang.garbage_collect()

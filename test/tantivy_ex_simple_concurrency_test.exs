@@ -89,15 +89,8 @@ defmodule TantivyEx.SimpleConcurrencyTest do
               {:ok, searcher} = Searcher.new(index)
               {:ok, query} = Query.all()
 
-              case Searcher.search(searcher, query, 25) do
-                {:ok, results} ->
-                  count = length(results)
-
-                  count
-
-                {:error, _} ->
-                  0
-              end
+              {:ok, results} = Searcher.search(searcher, query, 25)
+              length(results)
             end)
 
           {reader_id, search_counts}
