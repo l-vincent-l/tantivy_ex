@@ -5,9 +5,11 @@ permissions:
 
 jobs:
   report_mix_deps:
+    # Dependencies are reported for the default branch only
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: erlef/mix-dependency-submission@v1
 
   mix_test:
@@ -31,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
