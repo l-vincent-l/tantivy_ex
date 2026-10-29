@@ -1,5 +1,6 @@
 use rustler::{NifResult, ResourceArc};
 use serde_json;
+use std::sync::Mutex;
 use tantivy::collector::FacetCollector;
 use tantivy::query::{BooleanQuery, Occur};
 use tantivy::schema::Facet;
@@ -9,7 +10,7 @@ use crate::modules::resources::{QueryResource, SearcherResource};
 
 /// Resource for managing FacetCollector state
 pub struct FacetCollectorResource {
-    pub collector: FacetCollector,
+    pub collector: Mutex<FacetCollector>,
 }
 
 // Make FacetCollectorResource safe for concurrent access
@@ -34,7 +35,9 @@ pub fn facet_collector_for_field(
     field_name: String,
 ) -> NifResult<ResourceArc<FacetCollectorResource>> {
     let collector = FacetCollector::for_field(&field_name);
-    Ok(ResourceArc::new(FacetCollectorResource { collector }))
+    Ok(ResourceArc::new(FacetCollectorResource {
+        collector: Mutex::new(collector),
+    }))
 }
 
 /// Adds a facet path to the collector for counting
@@ -53,12 +56,7 @@ pub fn facet_collector_add_facet(
         }
     };
 
-    // Need to access the collector mutably, but ResourceArc doesn't allow mutation
-    // For now, we'll use an unsafe approach - in production this would need better design
-    let collector_ptr = &collector_res.collector as *const FacetCollector as *mut FacetCollector;
-    unsafe {
-        (*collector_ptr).add_facet(facet);
-    }
+    collector_res.collector.lock().unwrap().add_facet(facet);
 
     Ok(rustler::types::atom::ok())
 }
@@ -70,10 +68,8 @@ pub fn facet_search(
     query_res: ResourceArc<QueryResource>,
     collector_res: ResourceArc<FacetCollectorResource>,
 ) -> NifResult<String> {
-    match searcher_res
-        .searcher
-        .search(&*query_res.query, &collector_res.collector)
-    {
+    let collector = collector_res.collector.lock().unwrap();
+    match searcher_res.searcher.search(&*query_res.query, &*collector) {
         Ok(facet_counts) => {
             // Convert FacetCounts to a nested JSON structure
             let mut result = serde_json::Map::new();

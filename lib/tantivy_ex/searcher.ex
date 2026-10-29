@@ -12,11 +12,11 @@ defmodule TantivyEx.Searcher do
   alias TantivyEx.{Native, Index, Query}
 
   @type t :: reference()
-  @type search_result :: %{
-          score: float(),
-          doc_id: pos_integer(),
-          document: map()
-        }
+  @typedoc """
+  A search result: its `"score"` and, when documents are included, its stored
+  fields by name. A field with several values gives a list of them.
+  """
+  @type search_result :: %{optional(String.t()) => term()}
   @type snippet :: %{
           fragment: String.t(),
           highlighted: [{non_neg_integer(), non_neg_integer()}]
@@ -48,8 +48,13 @@ defmodule TantivyEx.Searcher do
   @doc """
   Searches the index with the given query.
 
-  This function supports both string queries (which are parsed using AllQuery for now)
-  and Query objects created with TantivyEx.Query functions.
+  This function supports both query strings, parsed with the index's tokenizers
+  over all the indexed text fields, and Query objects created with
+  TantivyEx.Query functions.
+
+  Each result is a map with the `"score"` and, with `include_docs`, the stored
+  fields of the document. A field with several values gives a list of them,
+  a field with one value gives that value.
 
   ## Parameters
 
@@ -60,7 +65,7 @@ defmodule TantivyEx.Searcher do
 
   ## Examples
 
-      # Simple string search (legacy - uses AllQuery)
+      # Query string, over all the indexed text fields
       iex> {:ok, results} = TantivyEx.Searcher.search(searcher, "hello world", 10)
 
       # Using Query objects for precise control
@@ -78,40 +83,17 @@ defmodule TantivyEx.Searcher do
   def search(searcher, query, limit \\ 10, include_docs \\ true)
 
   def search(searcher, query, limit, include_docs) when is_binary(query) do
-    # Legacy string-based search - uses the old implementation for now
-    # In the future, this could parse the string with a default parser
-    case Native.searcher_search(searcher, query, limit, include_docs) do
-      {:error, reason} ->
-        {:error, reason}
-
-      results_json when is_binary(results_json) ->
-        case Jason.decode(results_json) do
-          {:ok, results} -> {:ok, results}
-          {:error, _} -> {:error, "Failed to parse search results"}
-        end
-
-      results ->
-        {:ok, results}
-    end
+    searcher
+    |> Native.searcher_search(query, [], limit, include_docs)
+    |> search_result()
   rescue
     e -> {:error, "Failed to search: #{inspect(e)}"}
   end
 
   def search(searcher, query, limit, include_docs) when is_reference(query) do
-    # Query object-based search - uses the new enhanced search
-    case Native.searcher_search_with_query(searcher, query, limit, include_docs) do
-      {:error, reason} ->
-        {:error, reason}
-
-      results_json when is_binary(results_json) ->
-        case Jason.decode(results_json) do
-          {:ok, results} -> {:ok, results}
-          {:error, _} -> {:error, "Failed to parse search results"}
-        end
-
-      results ->
-        {:ok, results}
-    end
+    searcher
+    |> Native.searcher_search_with_query(query, limit, include_docs)
+    |> search_result()
   rescue
     e -> {:error, "Failed to search with query: #{inspect(e)}"}
   end
@@ -160,40 +142,6 @@ defmodule TantivyEx.Searcher do
   end
 
   @doc """
-  Searches the index and returns only document IDs.
-
-  This is more efficient when you only need document IDs, not the full documents or scores.
-
-  ## Parameters
-
-  - `searcher`: The Searcher
-  - `query`: The search query (string or Query.t())
-  - `limit`: Maximum number of results to return (default: 10)
-
-  ## Examples
-
-      iex> {:ok, query} = TantivyEx.Query.term(schema, "title", "hello")
-      iex> {:ok, doc_ids} = TantivyEx.Searcher.search_ids(searcher, query, 10)
-      iex> [1, 5, 3] = doc_ids
-  """
-  @spec search_ids(t(), String.t() | Query.t(), pos_integer()) ::
-          {:ok, [pos_integer()]} | {:error, String.t()}
-  def search_ids(searcher, query, limit \\ 10) do
-    case search(searcher, query, limit, false) do
-      {:ok, results} ->
-        doc_ids =
-          Enum.map(results, fn result ->
-            Map.get(result, "doc_id", 0)
-          end)
-
-        {:ok, doc_ids}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc """
   Performs a search and returns full documents with metadata.
 
   This function always includes full document content and is optimized for cases
@@ -209,7 +157,7 @@ defmodule TantivyEx.Searcher do
 
       iex> {:ok, query} = TantivyEx.Query.phrase(schema, "title", ["hello", "world"])
       iex> {:ok, results} = TantivyEx.Searcher.search_documents(searcher, query, 10)
-      iex> [%{"score" => 1.0, "doc_id" => 1, "title" => "hello world", "body" => "..."}] = results
+      iex> [%{"score" => 1.0, "title" => "hello world", "body" => "..."}] = results
   """
   @spec search_documents(t(), Query.t(), pos_integer()) ::
           {:ok, [search_result()]} | {:error, String.t()}
@@ -220,14 +168,13 @@ defmodule TantivyEx.Searcher do
   @doc """
   Performs a search with a query parser for Lucene-style queries.
 
-  This is a convenience function that creates a parser, parses the query string,
-  and performs the search in one call.
+  This is a convenience function that parses the query string with the index's
+  tokenizers and performs the search in one call.
 
   ## Parameters
 
   - `searcher`: The Searcher
-  - `schema`: The schema for field resolution
-  - `default_fields`: List of fields to search by default
+  - `default_fields`: List of fields searched by terms without a field
   - `query_str`: The Lucene-style query string
   - `limit`: Maximum number of results to return (default: 10)
   - `include_docs`: Whether to include full document content (default: true)
@@ -235,26 +182,22 @@ defmodule TantivyEx.Searcher do
   ## Examples
 
       iex> {:ok, results} = TantivyEx.Searcher.search_with_parser(
-      ...>   searcher, schema, ["title", "body"],
+      ...>   searcher, ["title", "body"],
       ...>   "title:hello AND body:world", 10
       ...> )
   """
-  @spec search_with_parser(t(), Schema.t(), [String.t()], String.t(), pos_integer(), boolean()) ::
+  @spec search_with_parser(t(), [String.t()], String.t(), pos_integer(), boolean()) ::
           {:ok, [search_result()]} | {:error, String.t()}
-  def search_with_parser(
-        searcher,
-        schema,
-        default_fields,
-        query_str,
-        limit \\ 10,
-        include_docs \\ true
-      ) do
-    with {:ok, parser} <- Query.parser(schema, default_fields),
-         {:ok, query} <- Query.parse(parser, query_str),
-         {:ok, results} <- search(searcher, query, limit, include_docs) do
-      {:ok, results}
-    else
-      {:error, reason} -> {:error, reason}
-    end
+  def search_with_parser(searcher, default_fields, query_str, limit \\ 10, include_docs \\ true)
+      when is_list(default_fields) and is_binary(query_str) do
+    searcher
+    |> Native.searcher_search(query_str, default_fields, limit, include_docs)
+    |> search_result()
+  rescue
+    e -> {:error, "Failed to search: #{inspect(e)}"}
   end
+
+  # The search NIFs return the results, or `{:error, reason}`
+  defp search_result({:error, reason}), do: {:error, reason}
+  defp search_result(results) when is_list(results), do: {:ok, results}
 end

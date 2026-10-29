@@ -78,7 +78,7 @@ defmodule TantivyEx.Native do
   # Search functions
   def index_reader(_index), do: :erlang.nif_error(:nif_not_loaded)
 
-  def searcher_search(_searcher, _query, _limit, _include_docs),
+  def searcher_search(_searcher, _query, _default_fields, _limit, _include_docs),
     do: :erlang.nif_error(:nif_not_loaded)
 
   # Query Parser functions

@@ -85,7 +85,6 @@ defmodule DocumentationExamplesTest do
     defstruct [
       :score,
       :normalized_score,
-      :doc_id,
       :title,
       :content,
       :author,
@@ -97,7 +96,7 @@ defmodule DocumentationExamplesTest do
     def from_tantivy_result(result, max_score \\ nil) do
       # Extract score and document from result map
       score = result["score"]
-      document = Map.delete(result, "score") |> Map.delete("doc_id")
+      document = Map.delete(result, "score")
 
       %__MODULE__{
         score: score,
@@ -322,9 +321,7 @@ defmodule DocumentationExamplesTest do
       # Results are maps, not tuples
       assert is_map(first_result)
       assert Map.has_key?(first_result, "score")
-      assert Map.has_key?(first_result, "doc_id")
       assert is_float(first_result["score"])
-      assert is_integer(first_result["doc_id"])
     end
   end
 
