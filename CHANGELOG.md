@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dirty schedulers** - The NIFs locking the index writer (`add_document`, `delete_*`, `rollback`...), `index_writer` and `index_reader` run on dirty IO schedulers: they could block a BEAM scheduler while waiting for a commit or for Tantivy's indexing queue. `tokenize_text` runs on a dirty CPU scheduler.
 - **Errors** - The functions no longer rescue every exception into `{:error, "Failed to ...: %ArgumentError{...}"}`: a failure returns `{:error, message}` with the message of Tantivy or of the wrapper, and an argument of the wrong type raises, as is usual in Elixir.
 - **Aggregation and facet results are maps built in Rust** - They were serialized to JSON and decoded with Jason. Aggregation errors are `{:error, message}` tuples instead of strings starting with "Error".
+- **Aggregations are Tantivy's** - Requests are deserialized and results serialized by Tantivy, in its Elasticsearch-compatible JSON, instead of being converted by hand for 11 types (`aggregation.rs` goes from 787 to about 110 lines). Every Tantivy aggregation is available (`cardinality`, `extended_stats`, `top_hits`, `filter`, `composite`...), and the Elixir validation no longer rejects them. Results change slightly: `doc_count_error_upper_bound` is `0` instead of `nil`, `range` with `keyed: true` gives a map of buckets, and the hits of `search_with_aggregations/5` have their `"score"`.
 
 ### Security
 
@@ -51,6 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`Aggregation.date_histogram/3`** - It sent a `calendar_interval`, which Tantivy does not support: every date histogram failed. It sends a `fixed_interval` (`"7d"`, `"1h"`).
+- **`Aggregation.metric(:count, field)`** - It is Tantivy's `value_count`. The errors of sub-aggregations were ignored by the validation.
 - **`Document.delete/4` and `Document.update/5` analyze the value with the field's tokenizer** - The deletion lowercased the value and split it on spaces, whatever the tokenizer: on a `raw` field ("AB-12") or a stemmed one, it returned `{:ok, :deleted}` and deleted nothing, so that `Document.update/5` added a duplicate. It now analyzes the value as `Query.term/3` does, with the same parsing for the other types (ISO 8601 dates included), and a value without terms is an error.
 - **`Query.phrase/3` and `Query.fuzzy/5` analyze their words** with the field's tokenizer: `phrase(schema, "title", ["Hello", "World"])` matched nothing on a lowercased field. A fuzzy query takes a single word.
 - **`Query.wildcard/3`** - The characters other than `*` and `?` were regular expression syntax (`"a.c"` matched "abc"), and a pattern ending with `*` that was not a valid regex became an exact term. They now match themselves.

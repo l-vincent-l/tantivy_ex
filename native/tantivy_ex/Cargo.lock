@@ -152,7 +152,6 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
- "serde",
  "wasm-bindgen",
  "windows-link 0.1.1",
 ]
@@ -1069,7 +1068,6 @@ dependencies = [
  "chrono",
  "lazy_static",
  "rustler",
- "serde",
  "serde_json",
  "tantivy",
 ]
