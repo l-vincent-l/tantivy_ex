@@ -66,6 +66,6 @@ defmodule TantivyEx.SnippetTest do
     {:ok, query} = Query.parse(parser, "rust")
 
     assert {:error, reason} = Searcher.snippet(searcher, query, "missing", @body)
-    assert reason =~ "Field not found"
+    assert reason =~ "Field 'missing' not found in schema"
   end
 end

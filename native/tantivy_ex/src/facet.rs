@@ -1,12 +1,11 @@
 use rustler::{NifResult, ResourceArc};
-use serde_json;
 use std::sync::{Mutex, PoisonError};
+use tantivy::Term as TantivyTerm;
 use tantivy::collector::FacetCollector;
 use tantivy::query::{AllQuery, BooleanQuery, Occur, Query, TermQuery};
 use tantivy::schema::{Facet, Field, FieldType, IndexRecordOption, Schema};
-use tantivy::Term as TantivyTerm;
 
-use crate::modules::resources::{json_to_term, QueryResource, SchemaResource, SearcherResource};
+use crate::resources::{QueryResource, SchemaResource, SearcherResource, error, json_to_term};
 
 /// The field and facets of a FacetCollector, built for each search: the
 /// resource is not locked while searching.
@@ -45,12 +44,7 @@ pub fn facet_collector_add_facet(
 ) -> NifResult<rustler::Atom> {
     let facet = match Facet::from_text(&facet_path) {
         Ok(f) => f,
-        Err(e) => {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Invalid facet path '{}': {}",
-                facet_path, e
-            ))))
-        }
+        Err(e) => return Err(error(format!("Invalid facet path '{}': {}", facet_path, e))),
     };
 
     // A panic cannot leave the list half-updated: it stays usable after one
@@ -86,7 +80,6 @@ pub fn facet_search<'a>(
             // Convert FacetCounts to a nested JSON structure
             let mut result = serde_json::Map::new();
 
-            // Get all facets and their counts
             let all_facets: Vec<(&Facet, u64)> = facet_counts.get("/").collect();
 
             // Build hierarchical structure
@@ -97,10 +90,7 @@ pub fn facet_search<'a>(
 
             Ok(json_to_term(env, &serde_json::Value::Object(result)))
         }
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Faceted search failed: {}",
-            e
-        )))),
+        Err(e) => Err(error(format!("Faceted search failed: {}", e))),
     }
 }
 
@@ -135,19 +125,16 @@ fn insert_facet_hierarchically(
 /// another field would match its own terms (the text token "public" for the
 /// facet "/public").
 pub fn facet_field(schema: &Schema, field_name: &str) -> NifResult<Field> {
-    let field = schema.get_field(field_name).map_err(|_| {
-        rustler::Error::Term(Box::new(format!(
-            "Field '{}' not found in schema",
-            field_name
-        )))
-    })?;
+    let field = schema
+        .get_field(field_name)
+        .map_err(|_| error(format!("Field '{}' not found in schema", field_name)))?;
 
     match schema.get_field_entry(field).field_type() {
         FieldType::Facet(_) => Ok(field),
-        _ => Err(rustler::Error::Term(Box::new(format!(
+        _ => Err(error(format!(
             "Field '{}' is not a facet field",
             field_name
-        )))),
+        ))),
     }
 }
 
@@ -168,21 +155,17 @@ pub fn facet_multi_query(
         "must" => Occur::Must,
         "must_not" => Occur::MustNot,
         _ => {
-            return Err(rustler::Error::Term(Box::new(format!(
+            return Err(error(format!(
                 "Invalid occur '{}': expected should, must or must_not",
                 occur_str
-            ))))
+            )));
         }
     };
 
     let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
     for facet_path in facet_paths {
-        let facet = Facet::from_text(&facet_path).map_err(|e| {
-            rustler::Error::Term(Box::new(format!(
-                "Invalid facet path '{}': {}",
-                facet_path, e
-            )))
-        })?;
+        let facet = Facet::from_text(&facet_path)
+            .map_err(|e| error(format!("Invalid facet path '{}': {}", facet_path, e)))?;
         let term = TantivyTerm::from_facet(field, &facet);
         clauses.push((
             occur,
@@ -205,10 +188,7 @@ pub fn facet_multi_query(
 pub fn facet_from_text(facet_path: String) -> NifResult<ResourceArc<FacetResource>> {
     match Facet::from_text(&facet_path) {
         Ok(facet) => Ok(ResourceArc::new(FacetResource { facet })),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Invalid facet path '{}': {}",
-            facet_path, e
-        )))),
+        Err(e) => Err(error(format!("Invalid facet path '{}': {}", facet_path, e))),
     }
 }
 

@@ -53,7 +53,7 @@ schema = TantivyEx.Schema.new()
 
 ```elixir
 # Register all default tokenizers at once
-"Default tokenizers registered successfully" = TantivyEx.Tokenizer.register_default_tokenizers()
+:ok = TantivyEx.Tokenizer.register_default_tokenizers()
 # Registers: "default", "simple", "keyword", "whitespace", "raw"
 # Plus language variants: "en_stem", "fr_stem", "de_stem", etc.
 # And analyzers: "en_text" (English with stop words + stemming)
@@ -394,7 +394,7 @@ The most convenient way to set up commonly used tokenizers is with the default r
 ```elixir
 # Register all default tokenizers at once
 message = TantivyEx.Tokenizer.register_default_tokenizers()
-IO.puts(message)  # "Default tokenizers registered successfully"
+IO.puts(message)  # :ok
 
 # This registers: "default", "simple", "keyword", "whitespace", "raw",
 # plus language-specific variants like "en_stem", "fr_stem", etc.

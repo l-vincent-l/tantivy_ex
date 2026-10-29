@@ -1,107 +1,76 @@
-use base64::{engine::general_purpose, Engine as _};
-use chrono;
-use rustler::{Encoder, Env, NifResult, ResourceArc, Term};
-use serde_json;
+use base64::{Engine as _, engine::general_purpose};
+use rustler::{NifResult, ResourceArc};
 use std::collections::HashMap;
+use tantivy::TantivyDocument;
 use tantivy::query::PhraseQuery;
 use tantivy::schema::{Field, FieldType, Schema};
-use tantivy::TantivyDocument;
 
-use crate::modules::resources::{
-    atoms, convert_ip_to_ipv6, convert_json_value_to_btreemap, error, IndexWriterResource,
-    QueryResource, SchemaResource,
+use crate::resources::{
+    IndexWriterResource, QueryResource, SchemaResource, atoms, convert_ip_to_ipv6,
+    convert_json_value_to_btreemap, error,
 };
-use crate::modules::terms::value_terms;
-
-/// Document operations and validation functions
+use crate::terms::{parse_rfc3339, value_terms};
 
 // The NIFs locking the writer run on dirty IO schedulers: they wait for the
 // lock while another call holds it (a commit), and for Tantivy's indexing
 // queue when it is full. Waiting on normal schedulers would block the VM, and
 // on dirty CPU schedulers would take them from the searches.
 #[rustler::nif(schedule = "DirtyIo")]
-pub fn writer_add_document<'a>(
-    env: Env<'a>,
+pub fn writer_add_document(
     writer_res: ResourceArc<IndexWriterResource>,
-    document: rustler::Term<'a>,
-) -> NifResult<Term<'a>> {
+    document: rustler::Term,
+) -> NifResult<rustler::Atom> {
     let writer = writer_res.lock()?;
-    let tantivy_doc = build_document(&writer.index().schema(), document)
-        .map_err(|e| rustler::Error::Term(Box::new(e)))?;
+    let tantivy_doc = build_document(&writer.index().schema(), document).map_err(error)?;
 
     match writer.add_document(tantivy_doc) {
-        Ok(_) => Ok(atoms::ok().encode(env)),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to add document: {}",
-            e
-        )))),
+        Ok(_) => Ok(atoms::ok()),
+        Err(e) => Err(error(format!("Failed to add document: {}", e))),
     }
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
-pub fn writer_commit<'a>(
-    env: Env<'a>,
-    writer_res: ResourceArc<IndexWriterResource>,
-) -> NifResult<Term<'a>> {
+pub fn writer_commit(writer_res: ResourceArc<IndexWriterResource>) -> NifResult<rustler::Atom> {
     let mut writer = writer_res.lock()?;
     match writer.commit() {
-        Ok(_) => Ok(atoms::ok().encode(env)),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to commit: {}",
-            e
-        )))),
+        Ok(_) => Ok(atoms::ok()),
+        Err(e) => Err(error(format!("Failed to commit: {}", e))),
     }
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
-pub fn writer_delete_documents<'a>(
-    env: Env<'a>,
+pub fn writer_delete_documents(
     writer_res: ResourceArc<IndexWriterResource>,
     query_res: ResourceArc<QueryResource>,
-) -> NifResult<Term<'a>> {
-    // Get a reference to the writer
+) -> NifResult<rustler::Atom> {
     let writer = writer_res.lock()?;
     let query = query_res.query.box_clone();
 
-    // Delete documents matching the query
     match writer.delete_query(query) {
-        Ok(_) => Ok(atoms::ok().encode(env)),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to delete documents by query: {}",
-            e
-        )))),
+        Ok(_) => Ok(atoms::ok()),
+        Err(e) => Err(error(format!("Failed to delete documents by query: {}", e))),
     }
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
-pub fn writer_delete_all_documents<'a>(
-    env: Env<'a>,
+pub fn writer_delete_all_documents(
     writer_res: ResourceArc<IndexWriterResource>,
-) -> NifResult<Term<'a>> {
+) -> NifResult<rustler::Atom> {
     let writer = writer_res.lock()?;
 
     match writer.delete_all_documents() {
-        Ok(_) => Ok(atoms::ok().encode(env)),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to delete all documents: {}",
-            e
-        )))),
+        Ok(_) => Ok(atoms::ok()),
+        Err(e) => Err(error(format!("Failed to delete all documents: {}", e))),
     }
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
-pub fn writer_rollback<'a>(
-    env: Env<'a>,
-    writer_res: ResourceArc<IndexWriterResource>,
-) -> NifResult<Term<'a>> {
+pub fn writer_rollback(writer_res: ResourceArc<IndexWriterResource>) -> NifResult<rustler::Atom> {
     let mut writer = writer_res.lock()?;
 
     match writer.rollback() {
-        Ok(_) => Ok(atoms::ok().encode(env)),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to rollback: {}",
-            e
-        )))),
+        Ok(_) => Ok(atoms::ok()),
+        Err(e) => Err(error(format!("Failed to rollback: {}", e))),
     }
 }
 
@@ -110,12 +79,11 @@ pub fn writer_rollback<'a>(
 /// the field's type otherwise. A text value of several words deletes the
 /// documents with this phrase.
 #[rustler::nif(schedule = "DirtyIo")]
-pub fn writer_delete_term<'a>(
-    env: Env<'a>,
+pub fn writer_delete_term(
     writer_res: ResourceArc<IndexWriterResource>,
     term_field: String,
-    term_value: rustler::Term<'a>,
-) -> NifResult<Term<'a>> {
+    term_value: rustler::Term,
+) -> NifResult<rustler::Atom> {
     let value = if let Ok(string) = term_value.decode::<String>() {
         string
     } else if let Ok(boolean) = term_value.decode::<bool>() {
@@ -144,77 +112,32 @@ pub fn writer_delete_term<'a>(
         ))),
         1 => {
             writer.delete_term(terms.remove(0));
-            Ok(atoms::ok().encode(env))
+            Ok(atoms::ok())
         }
         _ => {
             let query: Box<dyn tantivy::query::Query> = Box::new(PhraseQuery::new(terms));
             writer
                 .delete_query(query)
                 .map_err(|e| error(format!("Failed to delete by query: {}", e)))?;
-            Ok(atoms::ok().encode(env))
+            Ok(atoms::ok())
         }
     }
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
-pub fn writer_add_document_with_schema<'a>(
-    env: Env<'a>,
+pub fn writer_add_document_with_schema(
     writer_res: ResourceArc<IndexWriterResource>,
-    document: rustler::Term<'a>,
+    document: rustler::Term,
     schema_res: ResourceArc<SchemaResource>,
-) -> NifResult<Term<'a>> {
-    let tantivy_doc = build_document(&schema_res.schema, document)
-        .map_err(|e| rustler::Error::Term(Box::new(e)))?;
+) -> NifResult<rustler::Atom> {
+    let tantivy_doc = build_document(&schema_res.schema, document).map_err(error)?;
     let writer = writer_res.lock()?;
 
     match writer.add_document(tantivy_doc) {
-        Ok(_) => Ok(atoms::ok().encode(env)),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to add document: {}",
-            e
-        )))),
+        Ok(_) => Ok(atoms::ok()),
+        Err(e) => Err(error(format!("Failed to add document: {}", e))),
     }
 }
-
-#[rustler::nif]
-pub fn validate_document_against_schema<'a>(
-    env: Env<'a>,
-    document: rustler::Term<'a>,
-    schema_res: ResourceArc<SchemaResource>,
-) -> NifResult<Term<'a>> {
-    let doc_map: HashMap<String, rustler::Term> = match document.decode() {
-        Ok(map) => map,
-        Err(_) => {
-            return Err(rustler::Error::Term(Box::new(
-                "Failed to decode document map".to_string(),
-            )))
-        }
-    };
-
-    let schema = &schema_res.schema;
-    let mut validation_errors = Vec::new();
-
-    for (field_name, value) in doc_map {
-        if let Ok(field) = schema.get_field(&field_name) {
-            let field_entry = schema.get_field_entry(field);
-
-            if let Err(error) = validate_field_value(value, field_entry.field_type()) {
-                validation_errors.push(format!("Field '{}': {}", field_name, error));
-            }
-        } else {
-            validation_errors.push(format!("Unknown field: '{}'", field_name));
-        }
-    }
-
-    if validation_errors.is_empty() {
-        Ok(atoms::ok().encode(env))
-    } else {
-        let error_msg = validation_errors.join("; ");
-        Err(rustler::Error::Term(Box::new(error_msg)))
-    }
-}
-
-// Helper functions for document operations
 
 /// Builds a Tantivy document from an Elixir map of field names to values.
 ///
@@ -311,10 +234,8 @@ pub fn add_field_to_document(
                 doc.add_date(field, datetime);
                 Ok(())
             } else if let Ok(string_val) = value.decode::<String>() {
-                let dt = chrono::DateTime::parse_from_rfc3339(&string_val)
-                    .map_err(|_| "Invalid date format, expected ISO 8601".to_string())?;
-                let timestamp = dt.timestamp();
-                let datetime = tantivy::DateTime::from_timestamp_secs(timestamp);
+                let datetime = parse_rfc3339(&string_val)
+                    .ok_or_else(|| "Invalid date format, expected ISO 8601".to_string())?;
                 doc.add_date(field, datetime);
                 Ok(())
             } else {
@@ -371,109 +292,6 @@ pub fn add_field_to_document(
         }
     }
 }
-
-pub fn validate_field_value(value: rustler::Term, field_type: &FieldType) -> Result<(), String> {
-    match field_type {
-        FieldType::Str(_) => {
-            value
-                .decode::<String>()
-                .map_err(|_| "Expected string value")?;
-            Ok(())
-        }
-        FieldType::U64(_) => {
-            if value.decode::<u64>().is_ok() {
-                Ok(())
-            } else if let Ok(int_val) = value.decode::<i64>() {
-                if int_val >= 0 {
-                    Ok(())
-                } else {
-                    Err("Negative value not allowed for u64 field".to_string())
-                }
-            } else {
-                Err("Expected numeric value".to_string())
-            }
-        }
-        FieldType::I64(_) => {
-            if value.decode::<i64>().is_ok() || value.decode::<u64>().is_ok() {
-                Ok(())
-            } else {
-                Err("Expected numeric value".to_string())
-            }
-        }
-        FieldType::F64(_) => {
-            if value.decode::<f64>().is_ok()
-                || value.decode::<i64>().is_ok()
-                || value.decode::<u64>().is_ok()
-            {
-                Ok(())
-            } else {
-                Err("Expected numeric value".to_string())
-            }
-        }
-        FieldType::Bool(_) => {
-            value
-                .decode::<bool>()
-                .map_err(|_| "Expected boolean value")?;
-            Ok(())
-        }
-        FieldType::Date(_) => {
-            if value.decode::<i64>().is_ok() {
-                Ok(())
-            } else if let Ok(string_val) = value.decode::<String>() {
-                chrono::DateTime::parse_from_rfc3339(&string_val)
-                    .map_err(|_| "Invalid date format, expected ISO 8601".to_string())?;
-                Ok(())
-            } else {
-                Err("Expected timestamp (integer) or ISO 8601 date string".to_string())
-            }
-        }
-        FieldType::Facet(_) => {
-            // Handle both single strings and arrays of strings for facet fields
-            if let Ok(string_val) = value.decode::<String>() {
-                tantivy::schema::Facet::from_text(&string_val)
-                    .map_err(|_| "Invalid facet format".to_string())?;
-                Ok(())
-            } else if let Ok(facet_array) = value.decode::<Vec<rustler::Term>>() {
-                // Handle arrays of facet values
-                for facet_item in facet_array {
-                    if let Ok(facet_val) = facet_item.decode::<String>() {
-                        tantivy::schema::Facet::from_text(&facet_val)
-                            .map_err(|_| "Invalid facet format".to_string())?;
-                    }
-                }
-                Ok(())
-            } else {
-                Err("Expected string value or array of strings for facet".to_string())
-            }
-        }
-        FieldType::Bytes(_) => {
-            if value.decode::<Vec<u8>>().is_ok() {
-                Ok(())
-            } else if let Ok(string_val) = value.decode::<String>() {
-                general_purpose::STANDARD
-                    .decode(&string_val)
-                    .map_err(|_| "Invalid base64 encoding".to_string())?;
-                Ok(())
-            } else {
-                Err("Expected byte array or base64 string".to_string())
-            }
-        }
-        FieldType::JsonObject(_) => {
-            // JSON objects can be pretty much anything
-            Ok(())
-        }
-        FieldType::IpAddr(_) => {
-            let string_val: String = value
-                .decode()
-                .map_err(|_| "Expected string value for IP address")?;
-            string_val
-                .parse::<std::net::IpAddr>()
-                .map_err(|_| "Invalid IP address format".to_string())?;
-            Ok(())
-        }
-    }
-}
-
 pub fn convert_term_to_json_value(term: rustler::Term) -> serde_json::Value {
     if let Ok(s) = term.decode::<String>() {
         serde_json::Value::String(s)
