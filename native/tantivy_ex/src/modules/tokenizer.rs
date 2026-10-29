@@ -3,9 +3,9 @@ use rustler::{NifResult, ResourceArc};
 use std::collections::HashSet;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use tantivy::tokenizer::{
-    AsciiFoldingFilter, Language, LowerCaser, NgramTokenizer, PreTokenizedString, RawTokenizer,
-    RegexTokenizer, RemoveLongFilter, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer,
-    Token, TokenizerManager, WhitespaceTokenizer,
+    AsciiFoldingFilter, Language, LowerCaser, NgramTokenizer, RawTokenizer, RegexTokenizer,
+    RemoveLongFilter, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer, TokenizerManager,
+    WhitespaceTokenizer,
 };
 
 use crate::modules::resources::TokenizerManagerResource;
@@ -267,37 +267,6 @@ pub fn tokenize_text_detailed(
             tokenizer_name
         )))),
     }
-}
-
-/// Process pre-tokenized text
-#[rustler::nif(schedule = "DirtyCpu")]
-pub fn process_pre_tokenized_text(tokens: Vec<String>) -> NifResult<String> {
-    // Convert strings to Token structs
-    let token_structs: Vec<Token> = tokens
-        .into_iter()
-        .enumerate()
-        .map(|(i, text)| {
-            Token {
-                offset_from: i * 10, // Simple offset calculation
-                offset_to: (i + 1) * 10,
-                position: i,
-                text,
-                position_length: 1,
-            }
-        })
-        .collect();
-
-    let pre_tokenized = PreTokenizedString {
-        text: token_structs
-            .iter()
-            .map(|t| &t.text)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(" "),
-        tokens: token_structs,
-    };
-
-    Ok(format!("{:?}", pre_tokenized))
 }
 
 /// Register common tokenizers with sensible defaults

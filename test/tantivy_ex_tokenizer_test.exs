@@ -244,27 +244,6 @@ defmodule TantivyExTokenizerTest do
   end
 
   describe "pre-tokenized text processing" do
-    test "process_pre_tokenized_text/1 with valid pre-tokenized input" do
-      tokens = ["hello", "world", "test"]
-      result = Native.process_pre_tokenized_text(tokens)
-
-      # Result should be a string representation
-      assert is_binary(result)
-      assert String.contains?(result, "hello")
-      assert String.contains?(result, "world")
-      assert String.contains?(result, "test")
-    end
-
-    test "process_pre_tokenized_text/1 with empty input" do
-      result = Native.process_pre_tokenized_text([])
-      assert is_binary(result)
-    end
-
-    test "process_pre_tokenized_text/1 with single token" do
-      result = Native.process_pre_tokenized_text(["single"])
-      assert is_binary(result)
-      assert String.contains?(result, "single")
-    end
   end
 
   describe "edge cases" do
@@ -596,16 +575,6 @@ defmodule TantivyExTokenizerTest do
         assert end_pos > start_pos
       end
     end
-
-    test "process_pre_tokenized_text/1 handles pre-tokenized input" do
-      tokens = ["hello", "world", "test"]
-      result = Tokenizer.process_pre_tokenized_text(tokens)
-
-      assert is_binary(result)
-      assert String.contains?(result, "hello")
-      assert String.contains?(result, "world")
-      assert String.contains?(result, "test")
-    end
   end
 
   describe "comprehensive tokenizer behavior tests" do
@@ -819,7 +788,7 @@ defmodule TantivyExTokenizerTest do
       schema = Schema.add_text_field_with_tokenizer(schema, "content", :text, "default")
       schema = Schema.add_text_field_with_tokenizer(schema, "sku", :text_stored, "simple")
       schema = Schema.add_text_field_with_tokenizer(schema, "tags", :text, "whitespace")
-      schema = Schema.add_text_field_with_tokenizer(schema, "status", :indexed, "keyword")
+      schema = Schema.add_text_field_with_tokenizer(schema, "status", :text, "raw")
 
       # Verify schema can be used to create an index
       {:ok, _index} = Index.create_in_ram(schema)
@@ -969,35 +938,6 @@ defmodule TantivyExTokenizerTest do
   end
 
   describe "pre-tokenized text processing extended" do
-    test "process_pre_tokenized_text/1 with simple token list" do
-      tokens = ["hello", "world", "test"]
-      result = Native.process_pre_tokenized_text(tokens)
-
-      assert is_binary(result)
-      assert String.contains?(result, "PreTokenizedString")
-    end
-
-    test "process_pre_tokenized_text/1 with empty list" do
-      result = Native.process_pre_tokenized_text([])
-
-      assert is_binary(result)
-      assert String.contains?(result, "PreTokenizedString")
-    end
-
-    test "process_pre_tokenized_text/1 with complex tokens" do
-      tokens = ["The", "quick-brown", "fox@example.com", "C++"]
-      result = Native.process_pre_tokenized_text(tokens)
-
-      assert is_binary(result)
-      assert String.contains?(result, "PreTokenizedString")
-    end
-
-    test "process_pre_tokenized_text/1 with invalid input" do
-      # Test with non-string elements should raise ArgumentError
-      assert_raise ArgumentError, fn ->
-        Native.process_pre_tokenized_text([123, "hello", :atom])
-      end
-    end
   end
 
   describe "index integration" do

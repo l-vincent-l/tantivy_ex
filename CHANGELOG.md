@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **`Tokenizer.process_pre_tokenized_text/1`** - It returned the debug representation of a structure with made-up offsets.
 - **The Performance Tuning, Production Deployment and Integration Patterns guides** - Mostly generic advice and architectures around calls to functions that did not exist; the useful advice is in the README.
 - **`Native.writer_add_document_batch/3`** - It had no caller: `Document.add_batch/4` adds each document.
 - **`"doc_id"` in search results, and `Searcher.search_ids/3`** - It was the id of the document in its segment, not in the index: two documents could share it, and no function took it. Identify documents with a field of their own.
@@ -50,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`Document.delete/4` and `Document.update/5` analyze the value with the field's tokenizer** - The deletion lowercased the value and split it on spaces, whatever the tokenizer: on a `raw` field ("AB-12") or a stemmed one, it returned `{:ok, :deleted}` and deleted nothing, so that `Document.update/5` added a duplicate. It now analyzes the value as `Query.term/3` does, with the same parsing for the other types (ISO 8601 dates included), and a value without terms is an error.
+- **`Query.phrase/3` and `Query.fuzzy/5` analyze their words** with the field's tokenizer: `phrase(schema, "title", ["Hello", "World"])` matched nothing on a lowercased field. A fuzzy query takes a single word.
+- **`Query.wildcard/3`** - The characters other than `*` and `?` were regular expression syntax (`"a.c"` matched "abc"), and a pattern ending with `*` that was not a valid regex became an exact term. They now match themselves.
+- **Schemas** - A field name already in the schema made the NIF panic; it is an error. An unknown field option was replaced with a default; it raises an `ArgumentError`.
+- **Extracted query terms** - A query without terms (`Query.all/0`) gave the terms `"no_terms_found"` or `"terms_found_but_not_decoded"`, highlighted by `SearchResults.enhance/4`; it gives none.
 - **JSON fields** - The `:text` and `:text_stored` options of `Schema.add_json_field/3` neither indexed nor stored the field: their values could not be searched (`meta.color:red`), nor read in the results. They are now indexed, and stored with `:text_stored`. Nested objects and arrays were indexed as strings of JSON, and given back with their values as debug strings: they are kept, and given back as maps and lists.
 - **Facets in results** - Facet fields were indexed but not stored, contrary to their documentation: they are now given back in the results.
 - **IP addresses in results** - IPv4 addresses, indexed as IPv6 ones, are given back as IPv4 (`"192.168.1.10"`, not `"::ffff:192.168.1.10"`). The hits of `Aggregation.search_with_aggregations/5` also give dates as ISO 8601 strings, as the search does, instead of nanosecond timestamps.

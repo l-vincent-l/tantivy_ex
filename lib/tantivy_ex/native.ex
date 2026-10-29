@@ -160,7 +160,6 @@ defmodule TantivyEx.Native do
   def list_tokenizers(), do: :erlang.nif_error(:nif_not_loaded)
   def tokenize_text(_tokenizer_name, _text), do: :erlang.nif_error(:nif_not_loaded)
   def tokenize_text_detailed(_tokenizer_name, _text), do: :erlang.nif_error(:nif_not_loaded)
-  def process_pre_tokenized_text(_tokens), do: :erlang.nif_error(:nif_not_loaded)
   def register_default_tokenizers(), do: :erlang.nif_error(:nif_not_loaded)
 
   # Facet functions
