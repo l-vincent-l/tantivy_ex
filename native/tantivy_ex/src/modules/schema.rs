@@ -1,10 +1,16 @@
 use rustler::{Encoder, Env, NifResult, ResourceArc, Term};
 use tantivy::schema::{
-    BytesOptions, DateOptions, FacetOptions, FieldType, IpAddrOptions, JsonObjectOptions,
-    NumericOptions, Schema, TextFieldIndexing, TextOptions,
+    BytesOptions, DateOptions, FacetOptions, FieldType, IndexRecordOption, IpAddrOptions,
+    JsonObjectOptions, NumericOptions, Schema, TextFieldIndexing, TextOptions,
 };
 
 use crate::modules::resources::SchemaResource;
+
+/// The indexing of text fields: with term frequencies and positions, as
+/// Tantivy's `TEXT`, for BM25 scoring and phrase queries.
+fn text_indexing() -> TextFieldIndexing {
+    TextFieldIndexing::default().set_index_option(IndexRecordOption::WithFreqsAndPositions)
+}
 
 /// Schema building functions
 #[rustler::nif]
@@ -25,21 +31,18 @@ pub fn schema_add_text_field(
     // Parse options for the new field
     let field_options = match options.as_str() {
         "TEXT_STORED" => TextOptions::default()
-            .set_indexing_options(TextFieldIndexing::default())
+            .set_indexing_options(text_indexing())
             .set_stored(),
-        "TEXT" => TextOptions::default().set_indexing_options(TextFieldIndexing::default()),
+        "TEXT" => TextOptions::default().set_indexing_options(text_indexing()),
         "STORED" => TextOptions::default().set_stored(),
         "FAST" => TextOptions::default()
-            .set_indexing_options(TextFieldIndexing::default())
+            .set_indexing_options(text_indexing())
             .set_fast(None),
         "FAST_STORED" => TextOptions::default()
-            .set_indexing_options(
-                TextFieldIndexing::default()
-                    .set_index_option(tantivy::schema::IndexRecordOption::WithFreqsAndPositions),
-            )
+            .set_indexing_options(text_indexing())
             .set_stored()
             .set_fast(None),
-        _ => TextOptions::default().set_indexing_options(TextFieldIndexing::default()),
+        _ => TextOptions::default().set_indexing_options(text_indexing()),
     };
 
     schema_builder.add_text_field(&field_name, field_options);
@@ -61,16 +64,16 @@ pub fn schema_add_text_field_with_tokenizer(
     // Parse options and configure with custom tokenizer
     let field_options = match options.as_str() {
         "TEXT_STORED" => TextOptions::default()
-            .set_indexing_options(TextFieldIndexing::default().set_tokenizer(&tokenizer))
+            .set_indexing_options(text_indexing().set_tokenizer(&tokenizer))
             .set_stored(),
-        "TEXT" => TextOptions::default()
-            .set_indexing_options(TextFieldIndexing::default().set_tokenizer(&tokenizer)),
+        "TEXT" => {
+            TextOptions::default().set_indexing_options(text_indexing().set_tokenizer(&tokenizer))
+        }
         "STORED" => {
             // For STORED-only fields, we don't set indexing options or tokenizer
             TextOptions::default().set_stored()
         }
-        _ => TextOptions::default()
-            .set_indexing_options(TextFieldIndexing::default().set_tokenizer(&tokenizer)),
+        _ => TextOptions::default().set_indexing_options(text_indexing().set_tokenizer(&tokenizer)),
     };
 
     schema_builder.add_text_field(&field_name, field_options);

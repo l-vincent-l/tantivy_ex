@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Text fields are indexed with term frequencies and positions** - The `:text` and `:text_stored` options (and the fields with a tokenizer) indexed only the terms, unlike Tantivy's `TEXT`: phrase queries failed ("does not have positions indexed"), as did field queries such as `title:hello`, and scores ignored term frequencies. They are now indexed like Tantivy's `TEXT`. The option is stored in the index: an index created before keeps it until it is rebuilt.
 - **`Query.term/3` on a text field analyzes the value with the field's tokenizer** - It lowercased the value and split it on spaces whatever the tokenizer: a stemmed field did not match inflected words, nor a `raw` or `whitespace` field the values with capitals. Every token of the value is required, as before. On a `u64` field, a value that is not a number is an error instead of a query matching nothing.
 - **Multi-valued fields in `Aggregation.search_with_aggregations/5`** - Its hits kept only the last value of a field.
 - **Poisoned locks** - After a panic while the index writer was locked, every later call on it panicked. They now return an error naming the writer. The tokenizer registry and the facet collectors stay usable after a panic, and a facet collector is no longer locked during a search.
