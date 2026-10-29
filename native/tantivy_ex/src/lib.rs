@@ -39,19 +39,5 @@ rustler::atoms! {
     nil,
 }
 
-// NIF loading function
-fn load(env: rustler::Env, _: rustler::Term) -> bool {
-    let _ = rustler::resource!(modules::resources::SchemaResource, env);
-    let _ = rustler::resource!(modules::resources::IndexResource, env);
-    let _ = rustler::resource!(modules::resources::IndexWriterResource, env);
-    let _ = rustler::resource!(modules::resources::SearcherResource, env);
-    let _ = rustler::resource!(modules::resources::QueryResource, env);
-    let _ = rustler::resource!(modules::resources::QueryParserResource, env);
-    let _ = rustler::resource!(modules::resources::TokenizerManagerResource, env);
-    let _ = rustler::resource!(modules::facet::FacetCollectorResource, env);
-    let _ = rustler::resource!(modules::facet::FacetResource, env);
-    true
-}
-
 // Register all NIFs with rustler
-rustler::init!("Elixir.TantivyEx.Native", load = load);
+rustler::init!("Elixir.TantivyEx.Native");

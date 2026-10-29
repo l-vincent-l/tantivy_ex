@@ -1,6 +1,6 @@
 use rustler::{NifResult, ResourceArc};
 use serde_json;
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 use tantivy::collector::FacetCollector;
 use tantivy::query::{BooleanQuery, Occur};
 use tantivy::schema::Facet;
@@ -8,35 +8,32 @@ use tantivy::Term as TantivyTerm;
 
 use crate::modules::resources::{QueryResource, SearcherResource};
 
-/// Resource for managing FacetCollector state
+/// The field and facets of a FacetCollector, built for each search: the
+/// resource is not locked while searching.
 pub struct FacetCollectorResource {
-    pub collector: Mutex<FacetCollector>,
+    pub field_name: String,
+    pub facets: Mutex<Vec<Facet>>,
 }
 
-// Make FacetCollectorResource safe for concurrent access
-unsafe impl Send for FacetCollectorResource {}
-unsafe impl Sync for FacetCollectorResource {}
-impl std::panic::RefUnwindSafe for FacetCollectorResource {}
-impl std::panic::UnwindSafe for FacetCollectorResource {}
+#[rustler::resource_impl]
+impl rustler::Resource for FacetCollectorResource {}
 
 /// Resource for managing Facet state
 pub struct FacetResource {
     pub facet: Facet,
 }
 
-unsafe impl Send for FacetResource {}
-unsafe impl Sync for FacetResource {}
-impl std::panic::RefUnwindSafe for FacetResource {}
-impl std::panic::UnwindSafe for FacetResource {}
+#[rustler::resource_impl]
+impl rustler::Resource for FacetResource {}
 
 /// Creates a new facet collector for the specified field
 #[rustler::nif]
 pub fn facet_collector_for_field(
     field_name: String,
 ) -> NifResult<ResourceArc<FacetCollectorResource>> {
-    let collector = FacetCollector::for_field(&field_name);
     Ok(ResourceArc::new(FacetCollectorResource {
-        collector: Mutex::new(collector),
+        field_name,
+        facets: Mutex::new(Vec::new()),
     }))
 }
 
@@ -56,7 +53,12 @@ pub fn facet_collector_add_facet(
         }
     };
 
-    collector_res.collector.lock().unwrap().add_facet(facet);
+    // A panic cannot leave the list half-updated: it stays usable after one
+    collector_res
+        .facets
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(facet);
 
     Ok(rustler::types::atom::ok())
 }
@@ -68,8 +70,17 @@ pub fn facet_search(
     query_res: ResourceArc<QueryResource>,
     collector_res: ResourceArc<FacetCollectorResource>,
 ) -> NifResult<String> {
-    let collector = collector_res.collector.lock().unwrap();
-    match searcher_res.searcher.search(&*query_res.query, &*collector) {
+    let mut collector = FacetCollector::for_field(&collector_res.field_name);
+    let facets = collector_res
+        .facets
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    for facet in facets {
+        collector.add_facet(facet);
+    }
+
+    match searcher_res.searcher.search(&*query_res.query, &collector) {
         Ok(facet_counts) => {
             // Convert FacetCounts to a nested JSON structure
             let mut result = serde_json::Map::new();

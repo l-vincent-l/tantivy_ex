@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use rustler::{NifResult, ResourceArc};
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use tantivy::tokenizer::{
     AsciiFoldingFilter, Language, LowerCaser, NgramTokenizer, PreTokenizedString, RawTokenizer,
     RegexTokenizer, RemoveLongFilter, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer,
@@ -11,11 +11,19 @@ use tantivy::tokenizer::{
 use crate::modules::resources::TokenizerManagerResource;
 
 // Global tokenizer manager singleton and registry tracking
+// The TokenizerManager is shared and locked internally: its clones see the
+// tokenizers registered later.
 lazy_static! {
-    static ref GLOBAL_TOKENIZER_MANAGER: Arc<Mutex<TokenizerManager>> =
-        Arc::new(Mutex::new(TokenizerManager::default()));
-    static ref TOKENIZER_REGISTRY: Arc<Mutex<HashSet<String>>> =
-        Arc::new(Mutex::new(HashSet::new()));
+    static ref GLOBAL_TOKENIZER_MANAGER: TokenizerManager = TokenizerManager::default();
+    static ref TOKENIZER_REGISTRY: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
+}
+
+// A panic cannot leave the registry half-updated (a set of names, changed by
+// single inserts): it stays usable after one.
+fn registry() -> MutexGuard<'static, HashSet<String>> {
+    TOKENIZER_REGISTRY
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
 }
 
 // Helper function to register a tokenizer and track its name
@@ -23,11 +31,8 @@ fn register_tokenizer_with_tracking<T>(name: &str, tokenizer: T)
 where
     TextAnalyzer: From<T>,
 {
-    let manager = GLOBAL_TOKENIZER_MANAGER.lock().unwrap();
-    let mut registry = TOKENIZER_REGISTRY.lock().unwrap();
-
-    manager.register(name, tokenizer);
-    registry.insert(name.to_string());
+    GLOBAL_TOKENIZER_MANAGER.register(name, tokenizer);
+    registry().insert(name.to_string());
 }
 
 /// Create a new tokenizer manager
@@ -210,22 +215,19 @@ fn build_and_register_text_analyzer(
 /// indexes so that their fields can use them. A clone shares the tokenizers:
 /// one registered later is seen by the indexes already created.
 pub fn global_tokenizer_manager() -> TokenizerManager {
-    GLOBAL_TOKENIZER_MANAGER.lock().unwrap().clone()
+    GLOBAL_TOKENIZER_MANAGER.clone()
 }
 
 /// Get list of registered tokenizers
 #[rustler::nif]
 pub fn list_tokenizers() -> Vec<String> {
-    let registry = TOKENIZER_REGISTRY.lock().unwrap();
-    registry.iter().cloned().collect()
+    registry().iter().cloned().collect()
 }
 
 /// Test tokenization with a registered tokenizer
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyCpu")]
 pub fn tokenize_text(tokenizer_name: String, text: String) -> NifResult<Vec<String>> {
-    let manager = GLOBAL_TOKENIZER_MANAGER.lock().unwrap();
-
-    match manager.get(&tokenizer_name) {
+    match GLOBAL_TOKENIZER_MANAGER.get(&tokenizer_name) {
         Some(mut tokenizer) => {
             let mut token_stream = tokenizer.token_stream(&text);
             let mut tokens = Vec::new();
@@ -249,9 +251,7 @@ pub fn tokenize_text_detailed(
     tokenizer_name: String,
     text: String,
 ) -> NifResult<Vec<(String, usize, usize)>> {
-    let manager = GLOBAL_TOKENIZER_MANAGER.lock().unwrap();
-
-    match manager.get(&tokenizer_name) {
+    match GLOBAL_TOKENIZER_MANAGER.get(&tokenizer_name) {
         Some(mut tokenizer) => {
             let mut token_stream = tokenizer.token_stream(&text);
             let mut tokens = Vec::new();

@@ -8,7 +8,7 @@ use tantivy::{Searcher, TantivyDocument};
 
 use crate::modules::resources::{QueryResource, SearcherResource};
 
-/// Search and retrieval functions
+// Search and retrieval functions
 
 /// Searches with a query string, parsed with the index's tokenizers. The
 /// default fields are the fields searched by terms without a field; when

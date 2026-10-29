@@ -14,13 +14,17 @@ use crate::modules::resources::{
 
 /// Document operations and validation functions
 
-#[rustler::nif]
+// The NIFs locking the writer run on dirty IO schedulers: they wait for the
+// lock while another call holds it (a commit), and for Tantivy's indexing
+// queue when it is full. Waiting on normal schedulers would block the VM, and
+// on dirty CPU schedulers would take them from the searches.
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_add_document<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
     document: rustler::Term<'a>,
 ) -> NifResult<Term<'a>> {
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
     let tantivy_doc = build_document(&writer.index().schema(), document)
         .map_err(|e| rustler::Error::Term(Box::new(e)))?;
 
@@ -38,7 +42,7 @@ pub fn writer_commit<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
 ) -> NifResult<Term<'a>> {
-    let mut writer = writer_res.writer.lock().unwrap();
+    let mut writer = writer_res.lock()?;
     match writer.commit() {
         Ok(_) => Ok(atoms::ok().encode(env)),
         Err(e) => Err(rustler::Error::Term(Box::new(format!(
@@ -48,14 +52,14 @@ pub fn writer_commit<'a>(
     }
 }
 
-#[rustler::nif(schedule = "DirtyCpu")]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_delete_documents<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
     query_res: ResourceArc<QueryResource>,
 ) -> NifResult<Term<'a>> {
     // Get a reference to the writer
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
     let query = query_res.query.box_clone();
 
     // Delete documents matching the query
@@ -68,12 +72,12 @@ pub fn writer_delete_documents<'a>(
     }
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_delete_all_documents<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
 ) -> NifResult<Term<'a>> {
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
 
     match writer.delete_all_documents() {
         Ok(_) => Ok(atoms::ok().encode(env)),
@@ -84,12 +88,12 @@ pub fn writer_delete_all_documents<'a>(
     }
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_rollback<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
 ) -> NifResult<Term<'a>> {
-    let mut writer = writer_res.writer.lock().unwrap();
+    let mut writer = writer_res.lock()?;
 
     match writer.rollback() {
         Ok(_) => Ok(atoms::ok().encode(env)),
@@ -100,14 +104,14 @@ pub fn writer_rollback<'a>(
     }
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_delete_term<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
     term_field: String,
     term_value: rustler::Term<'a>,
 ) -> NifResult<Term<'a>> {
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
     let schema = writer.index().schema();
 
     // Get the field from the schema
@@ -169,15 +173,11 @@ pub fn writer_delete_term<'a>(
 
                     // Perform the deletion using query
                     match writer.delete_query(query) {
-                        Ok(_opstamp) => {
-                            return Ok(atoms::ok().encode(env));
-                        }
-                        Err(e) => {
-                            return Err(rustler::Error::Term(Box::new(format!(
-                                "Failed to delete by query: {}",
-                                e
-                            ))));
-                        }
+                        Ok(_opstamp) => Ok(atoms::ok().encode(env)),
+                        Err(e) => Err(rustler::Error::Term(Box::new(format!(
+                            "Failed to delete by query: {}",
+                            e
+                        )))),
                     }
                 } else {
                     // Non-tokenized text field - use term deletion
@@ -186,12 +186,12 @@ pub fn writer_delete_term<'a>(
                     // Perform the deletion
                     let _opstamp = writer.delete_term(tantivy_term.clone());
 
-                    return Ok(atoms::ok().encode(env));
+                    Ok(atoms::ok().encode(env))
                 }
             } else {
-                return Err(rustler::Error::Term(Box::new(
+                Err(rustler::Error::Term(Box::new(
                     "Invalid string value for text field".to_string(),
-                )));
+                )))
             }
         }
         FieldType::U64(_) => {
@@ -225,7 +225,7 @@ pub fn writer_delete_term<'a>(
             // Perform the deletion
             let _opstamp = writer.delete_term(tantivy_term.clone());
 
-            return Ok(atoms::ok().encode(env));
+            Ok(atoms::ok().encode(env))
         }
         FieldType::I64(_) => {
             let tantivy_term = if let Ok(int_val) = term_value.decode::<i64>() {
@@ -252,7 +252,7 @@ pub fn writer_delete_term<'a>(
             // Perform the deletion
             let _opstamp = writer.delete_term(tantivy_term.clone());
 
-            return Ok(atoms::ok().encode(env));
+            Ok(atoms::ok().encode(env))
         }
         FieldType::F64(_) => {
             let tantivy_term = if let Ok(float_val) = term_value.decode::<f64>() {
@@ -279,7 +279,7 @@ pub fn writer_delete_term<'a>(
             // Perform the deletion
             let _opstamp = writer.delete_term(tantivy_term.clone());
 
-            return Ok(atoms::ok().encode(env));
+            Ok(atoms::ok().encode(env))
         }
         FieldType::Bool(_) => {
             let tantivy_term = if let Ok(bool_val) = term_value.decode::<bool>() {
@@ -306,7 +306,7 @@ pub fn writer_delete_term<'a>(
             // Perform the deletion
             let _opstamp = writer.delete_term(tantivy_term.clone());
 
-            return Ok(atoms::ok().encode(env));
+            Ok(atoms::ok().encode(env))
         }
         FieldType::Date(_) => {
             let tantivy_term = if let Ok(timestamp) = term_value.decode::<i64>() {
@@ -336,18 +336,16 @@ pub fn writer_delete_term<'a>(
             // Perform the deletion
             let _opstamp = writer.delete_term(tantivy_term.clone());
 
-            return Ok(atoms::ok().encode(env));
+            Ok(atoms::ok().encode(env))
         }
-        _ => {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Unsupported field type for deletion: {:?}",
-                field_type
-            ))));
-        }
-    };
+        _ => Err(rustler::Error::Term(Box::new(format!(
+            "Unsupported field type for deletion: {:?}",
+            field_type
+        )))),
+    }
 }
 
-#[rustler::nif]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_add_document_with_schema<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
@@ -356,7 +354,7 @@ pub fn writer_add_document_with_schema<'a>(
 ) -> NifResult<Term<'a>> {
     let tantivy_doc = build_document(&schema_res.schema, document)
         .map_err(|e| rustler::Error::Term(Box::new(e)))?;
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
 
     match writer.add_document(tantivy_doc) {
         Ok(_) => Ok(atoms::ok().encode(env)),
@@ -367,7 +365,7 @@ pub fn writer_add_document_with_schema<'a>(
     }
 }
 
-#[rustler::nif(schedule = "DirtyCpu")]
+#[rustler::nif(schedule = "DirtyIo")]
 pub fn writer_add_document_batch<'a>(
     env: Env<'a>,
     writer_res: ResourceArc<IndexWriterResource>,
@@ -375,7 +373,7 @@ pub fn writer_add_document_batch<'a>(
     schema_res: ResourceArc<SchemaResource>,
 ) -> NifResult<Term<'a>> {
     let schema = &schema_res.schema;
-    let writer = writer_res.writer.lock().unwrap();
+    let writer = writer_res.lock()?;
 
     let mut successful_count = 0;
     let mut errors = Vec::new();
@@ -438,7 +436,7 @@ pub fn validate_document_against_schema<'a>(
     }
 }
 
-/// Helper functions for document operations
+// Helper functions for document operations
 
 /// Builds a Tantivy document from an Elixir map of field names to values.
 ///

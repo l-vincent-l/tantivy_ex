@@ -45,6 +45,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+          components: clippy, rustfmt
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -81,6 +82,13 @@ jobs:
 
       - name: Compile & lint dependencies
         run: mix compile --warnings-as-errors
+        if: ${{ matrix.lint }}
+
+      - name: Lint the NIF
+        working-directory: native/tantivy_ex
+        run: |
+          cargo fmt --check
+          cargo clippy --release -- -D warnings
         if: ${{ matrix.lint }}
 
       - name: Run tests

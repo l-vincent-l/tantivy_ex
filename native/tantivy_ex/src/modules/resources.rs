@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
-use std::panic::{RefUnwindSafe, UnwindSafe};
-use std::sync::{Arc, Mutex};
+use std::panic::RefUnwindSafe;
+use std::sync::{Arc, Mutex, MutexGuard};
 use tantivy::schema::{OwnedValue, Schema};
 use tantivy::tokenizer::TokenizerManager;
 use tantivy::{query::QueryParser, Index, IndexWriter};
@@ -10,56 +10,73 @@ pub struct IndexResource {
     pub index: Arc<Index>,
 }
 
-// Make IndexResource safe for unwind
-unsafe impl Send for IndexResource {}
-unsafe impl Sync for IndexResource {}
+#[rustler::resource_impl]
+impl rustler::Resource for IndexResource {}
+
+// Rustler catches the panics of NIFs, which requires their arguments to be
+// `RefUnwindSafe`. A panic leaves no broken invariant behind a `&IndexResource`:
+// the index is not mutated once in the resource, and the tokenizer manager it
+// shares is behind a lock.
 impl RefUnwindSafe for IndexResource {}
-impl UnwindSafe for IndexResource {}
 
 pub struct SchemaResource {
     pub schema: Schema,
 }
 
+#[rustler::resource_impl]
+impl rustler::Resource for SchemaResource {}
+
 pub struct IndexWriterResource {
     pub writer: Arc<Mutex<IndexWriter>>,
+}
+
+#[rustler::resource_impl]
+impl rustler::Resource for IndexWriterResource {}
+
+impl IndexWriterResource {
+    /// Locks the writer. A panic while it was locked leaves it in an unknown
+    /// state: it is then an error to use it, instead of a panic in every call.
+    pub fn lock(&self) -> rustler::NifResult<MutexGuard<'_, IndexWriter>> {
+        self.writer.lock().map_err(|_| {
+            rustler::Error::Term(Box::new(
+                "The index writer is unusable: an operation panicked while using it".to_string(),
+            ))
+        })
+    }
 }
 
 pub struct SearcherResource {
     pub searcher: Arc<tantivy::Searcher>,
 }
 
+#[rustler::resource_impl]
+impl rustler::Resource for SearcherResource {}
+
 pub struct QueryResource {
     pub query: Box<dyn tantivy::query::Query>,
 }
+
+#[rustler::resource_impl]
+impl rustler::Resource for QueryResource {}
+
+// Rustler catches the panics of NIFs, which requires their arguments to be
+// `RefUnwindSafe`. A panic leaves no broken invariant behind a `&QueryResource`:
+// queries are not mutated once built.
+impl RefUnwindSafe for QueryResource {}
 
 pub struct QueryParserResource {
     pub parser: QueryParser,
 }
 
+#[rustler::resource_impl]
+impl rustler::Resource for QueryParserResource {}
+
 pub struct TokenizerManagerResource {
     pub manager: TokenizerManager,
 }
 
-// Make SearcherResource safe for unwind
-unsafe impl Send for SearcherResource {}
-unsafe impl Sync for SearcherResource {}
-impl RefUnwindSafe for SearcherResource {}
-impl UnwindSafe for SearcherResource {}
-
-unsafe impl Send for QueryResource {}
-unsafe impl Sync for QueryResource {}
-impl RefUnwindSafe for QueryResource {}
-impl UnwindSafe for QueryResource {}
-
-unsafe impl Send for QueryParserResource {}
-unsafe impl Sync for QueryParserResource {}
-impl RefUnwindSafe for QueryParserResource {}
-impl UnwindSafe for QueryParserResource {}
-
-unsafe impl Send for TokenizerManagerResource {}
-unsafe impl Sync for TokenizerManagerResource {}
-impl RefUnwindSafe for TokenizerManagerResource {}
-impl UnwindSafe for TokenizerManagerResource {}
+#[rustler::resource_impl]
+impl rustler::Resource for TokenizerManagerResource {}
 
 // Helper function to convert serde_json::Value to BTreeMap<String, OwnedValue>
 pub fn convert_json_value_to_btreemap(value: serde_json::Value) -> BTreeMap<String, OwnedValue> {
