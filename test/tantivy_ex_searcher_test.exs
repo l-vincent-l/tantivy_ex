@@ -95,6 +95,7 @@ defmodule TantivyEx.SearcherTest do
       assert {:ok, [result]} = Searcher.search(searcher, "bonjour", 10)
       assert is_float(result["score"])
       assert result["title"] == "Bonjour"
+      assert result["category"] == "/lang/fr"
       refute Map.has_key?(result, "doc_id")
 
       assert {:ok, [result]} = Searcher.search(searcher, "bonjour", 10, false)

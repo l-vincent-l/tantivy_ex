@@ -2,7 +2,7 @@ use base64::{engine::general_purpose, Engine as _};
 use rustler::{Encoder, Env, NifResult, ResourceArc, Term};
 use tantivy::collector::TopDocs;
 use tantivy::query::{Query, QueryParser};
-use tantivy::schema::{FieldType, Value};
+use tantivy::schema::{Facet, FieldType, Value};
 use tantivy::snippet::SnippetGenerator;
 use tantivy::{Searcher, TantivyDocument};
 
@@ -126,7 +126,13 @@ fn search_results<'a>(
 }
 
 fn encode_value<'a, 'b, V: Value<'b>>(env: Env<'a>, value: V) -> Term<'a> {
-    if let Some(s) = value.as_str() {
+    // A stored facet is in its encoded form: it is decoded into its path
+    if let Some(encoded) = value.as_facet() {
+        match Facet::from_encoded(encoded.as_bytes().to_vec()) {
+            Ok(facet) => facet.to_string().encode(env),
+            Err(_) => encoded.encode(env),
+        }
+    } else if let Some(s) = value.as_str() {
         s.encode(env)
     } else if let Some(n) = value.as_u64() {
         n.encode(env)
@@ -138,8 +144,6 @@ fn encode_value<'a, 'b, V: Value<'b>>(env: Env<'a>, value: V) -> Term<'a> {
         b.encode(env)
     } else if let Some(d) = value.as_datetime() {
         format!("{:?}", d).encode(env)
-    } else if let Some(f) = value.as_facet() {
-        f.to_string().encode(env)
     } else if let Some(b) = value.as_bytes() {
         general_purpose::STANDARD.encode(b).encode(env)
     } else if let Some(obj_iter) = value.as_object() {
