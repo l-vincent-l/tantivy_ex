@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `TantivyEx.ReaderManager`: fixed memory usage, and most functions called NIFs that did not exist.
   - `TantivyEx.Performance`: `optimize_index`, `compact_index` and `force_merge` only logged.
   - `TantivyEx.Memory` and `TantivyEx.ResourceManager`: measured the BEAM's memory, not Tantivy's.
-  - `TantivyEx.Distributed.*`, which built on them, and the "OTP Distributed Search" guide.
+  - `TantivyEx.Distributed.*`: the nodes ignored their endpoint and searched a 3-document demo index, all in the same VM; string searches crashed the node. Removed with the "OTP Distributed Search" guide.
 - The `:sasl` and `:os_mon` applications, which only `TantivyEx.Memory` used, and its configuration.
 
 ### Fixed
