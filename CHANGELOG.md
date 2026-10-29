@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Search results are maps built in Rust** - They were serialized to JSON in Rust and decoded with Jason. Their keys are unchanged.
 - **Values of documents are read the same way by every function** - A string for a bytes field is base64, as in search results: `IndexWriter.add_document/2` took it as raw bytes. A JSON field takes a map or a string holding a JSON object.
 - **`Searcher.search_with_parser/5`** - Takes the default fields without the schema: `search_with_parser(searcher, default_fields, query_str, limit, include_docs)`. It passed the schema where an index was expected, and always failed.
+- **rustler 0.38** - For the crate and the Mix package (`~> 0.38`), with `#[rustler::resource_impl]` instead of the `rustler::resource!` macro and its 14 compile warnings. The resources lose their `unsafe impl Send`/`Sync`: the compiler checks them.
+- **Dirty schedulers** - The NIFs locking the index writer (`add_document`, `delete_*`, `rollback`...), `index_writer` and `index_reader` run on dirty IO schedulers: they could block a BEAM scheduler while waiting for a commit or for Tantivy's indexing queue. `tokenize_text` runs on a dirty CPU scheduler.
 
 ### Removed
 
@@ -37,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Poisoned locks** - After a panic while the index writer was locked, every later call on it panicked. They now return an error naming the writer. The tokenizer registry and the facet collectors stay usable after a panic, and a facet collector is no longer locked during a search.
 - **`Searcher.search/4` with a query string** - The string was ignored and every document matched. It is now parsed over the indexed text fields, with the index's tokenizers, and an invalid query is an error.
 - **Documents with invalid fields are rejected** - `IndexWriter.add_document/2` and `Document.add/3` skipped, without an error, an unknown field, a value of the wrong type (e.g. a negative integer for a `u64` field) or an invalid JSON object, and `Document.add_batch/4` skipped unknown fields. They now return an error naming the field. A list adds each of its values to a field, for every field type.
 - **Multi-valued fields** - Search results kept only the last value of a field. A field with several values now gives a list of them, a field with one value gives that value.
