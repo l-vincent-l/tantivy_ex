@@ -79,10 +79,7 @@ defmodule TantivyEx.MixProject do
         "docs/search.md",
         "docs/search_results.md",
         "docs/tokenizers.md",
-        "docs/aggregations.md",
-        "docs/integration-patterns.md",
-        "docs/performance-tuning.md",
-        "docs/production-deployment.md"
+        "docs/aggregations.md"
       ],
       groups_for_extras: [
         Guides: ~r/docs\/.*/

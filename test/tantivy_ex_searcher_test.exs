@@ -41,6 +41,27 @@ defmodule TantivyEx.SearcherTest do
       assert {:ok, []} = Searcher.search(searcher, "missing", 10)
     end
 
+    test "finds phrases and terms of a field", %{searcher: searcher} do
+      # Text fields are indexed with positions
+      assert {:ok, results} = Searcher.search(searcher, ~s("hello world"), 10)
+      assert ids(results) == [1]
+
+      assert {:ok, results} = Searcher.search(searcher, "body:hello", 10)
+      assert ids(results) == [2]
+    end
+
+    test "finds phrases in a field with its own tokenizer" do
+      schema = Schema.add_text_field_with_tokenizer(Schema.new(), "text", :text_stored, "en_stem")
+      {:ok, index} = Index.create_in_ram(schema)
+      {:ok, writer} = IndexWriter.new(index, 50_000_000)
+      :ok = IndexWriter.add_document(writer, %{"text" => "The runners were running"})
+      :ok = IndexWriter.commit(writer)
+      {:ok, searcher} = Searcher.new(index)
+
+      {:ok, query} = Query.phrase(schema, "text", ["were", "run"])
+      assert {:ok, [_]} = Searcher.search(searcher, query, 10)
+    end
+
     test "returns an error on an invalid query", %{searcher: searcher} do
       assert {:error, reason} = Searcher.search(searcher, "unknown_field:hello", 10)
       assert reason =~ "Failed to parse query"

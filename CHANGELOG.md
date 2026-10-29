@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The guides' examples run as tests** - `test/guides_test.exs` runs the Elixir blocks of each guide in order, as in an IEx session, and checks the `# => value` comments. The README and the Quick Start Tutorial are rewritten on the actual API: all 9 examples of the tutorial failed.
 - **Snippets with Tantivy's `SnippetGenerator`** - `TantivyEx.Searcher.snippet/5` returns the fragment of a text that best matches a query, with the byte ranges of the matched terms. Terms are matched with the field's tokenizer, as in the search, and the text does not need to be stored in the index.
 - **ASCII folding in text analyzers** - `TantivyEx.Tokenizer.register_text_analyzer/7` takes an `ascii_folding` flag (default `false`): accented characters are folded to ASCII after stemming, so that "ecole" matches "école".
 
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **The Performance Tuning, Production Deployment and Integration Patterns guides** - Mostly generic advice and architectures around calls to functions that did not exist; the useful advice is in the README.
 - **`Native.writer_add_document_batch/3`** - It had no caller: `Document.add_batch/4` adds each document.
 - **`"doc_id"` in search results, and `Searcher.search_ids/3`** - It was the id of the document in its segment, not in the index: two documents could share it, and no function took it. Identify documents with a field of their own.
 - **Placeholder modules** - These modules returned made-up values or did nothing, and are removed with their NIFs, tests and guide:
@@ -42,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Text fields are indexed with term frequencies and positions** - The `:text` and `:text_stored` options (and the fields with a tokenizer) indexed only the terms, unlike Tantivy's `TEXT`: phrase queries failed ("does not have positions indexed"), as did field queries such as `title:hello`, and scores ignored term frequencies. They are now indexed like Tantivy's `TEXT`. The option is stored in the index: an index created before keeps it until it is rebuilt.
 - **`Query.term/3` on a text field analyzes the value with the field's tokenizer** - It lowercased the value and split it on spaces whatever the tokenizer: a stemmed field did not match inflected words, nor a `raw` or `whitespace` field the values with capitals. Every token of the value is required, as before. On a `u64` field, a value that is not a number is an error instead of a query matching nothing.
 - **Multi-valued fields in `Aggregation.search_with_aggregations/5`** - Its hits kept only the last value of a field.
 - **Poisoned locks** - After a panic while the index writer was locked, every later call on it panicked. They now return an error naming the writer. The tokenizer registry and the facet collectors stay usable after a panic, and a facet collector is no longer locked during a search.

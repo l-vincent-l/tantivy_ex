@@ -395,4 +395,3 @@ Now that you understand the core concepts, explore these guides:
 - **[Schema Design Guide](schema.md)** - Design effective schemas
 - **[Indexing Guide](indexing.md)** - Master document operations
 - **[Search Guide](search.md)** - Learn advanced querying
-- **[Performance Tuning](performance-tuning.md)** - Optimize for production
