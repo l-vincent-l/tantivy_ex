@@ -81,33 +81,14 @@ impl rustler::Resource for TokenizerManagerResource {}
 
 // Helper function to convert serde_json::Value to BTreeMap<String, OwnedValue>
 pub fn convert_json_value_to_btreemap(value: serde_json::Value) -> BTreeMap<String, OwnedValue> {
-    let mut map = BTreeMap::new();
-
-    if let serde_json::Value::Object(obj) = value {
-        for (key, val) in obj {
-            let owned_value = match val {
-                serde_json::Value::String(s) => OwnedValue::Str(s),
-                serde_json::Value::Number(n) => {
-                    if let Some(i) = n.as_i64() {
-                        OwnedValue::I64(i)
-                    } else if let Some(u) = n.as_u64() {
-                        OwnedValue::U64(u)
-                    } else if let Some(f) = n.as_f64() {
-                        OwnedValue::F64(f)
-                    } else {
-                        OwnedValue::Str(n.to_string())
-                    }
-                }
-                serde_json::Value::Bool(b) => OwnedValue::Bool(b),
-                serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
-                    OwnedValue::Str(val.to_string())
-                }
-                serde_json::Value::Null => OwnedValue::Str("null".to_string()),
-            };
-            map.insert(key, owned_value);
-        }
+    // Tantivy's conversion, recursive: nested objects and arrays are kept
+    match value {
+        serde_json::Value::Object(obj) => obj
+            .into_iter()
+            .map(|(key, val)| (key, OwnedValue::from(val)))
+            .collect(),
+        _ => BTreeMap::new(),
     }
-    map
 }
 
 // Helper function to convert IpAddr to Ipv6Addr

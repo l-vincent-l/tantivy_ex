@@ -143,16 +143,24 @@ fn encode_value<'a, 'b, V: Value<'b>>(env: Env<'a>, value: V) -> Term<'a> {
     } else if let Some(b) = value.as_bytes() {
         general_purpose::STANDARD.encode(b).encode(env)
     } else if let Some(obj_iter) = value.as_object() {
-        // For now, values are converted to strings - could be enhanced later
         let mut map = rustler::types::map::map_new(env);
         for (key, val) in obj_iter {
-            if let Ok(updated) = map.map_put(key.encode(env), format!("{:?}", val).encode(env)) {
+            if let Ok(updated) = map.map_put(key.encode(env), encode_value(env, val)) {
                 map = updated;
             }
         }
         map
+    } else if let Some(array_iter) = value.as_array() {
+        array_iter
+            .map(|val| encode_value(env, val))
+            .collect::<Vec<_>>()
+            .encode(env)
     } else if let Some(ip) = value.as_ip_addr() {
-        ip.to_string().encode(env)
+        // IPv4 addresses are indexed as IPv6 ones: they are given back as IPv4
+        match ip.to_ipv4_mapped() {
+            Some(ipv4) => ipv4.to_string().encode(env),
+            None => ip.to_string().encode(env),
+        }
     } else {
         rustler::types::atom::nil().encode(env)
     }

@@ -256,7 +256,10 @@ pub fn schema_add_json_field(
 
     let field_options = match options.as_str() {
         "STORED" => JsonObjectOptions::default().set_stored(),
-        _ => JsonObjectOptions::default(), // JSON fields are indexed by default
+        "TEXT_STORED" => JsonObjectOptions::default()
+            .set_indexing_options(text_indexing())
+            .set_stored(),
+        _ => JsonObjectOptions::default().set_indexing_options(text_indexing()),
     };
 
     schema_builder.add_json_field(&field_name, field_options);
