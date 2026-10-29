@@ -37,8 +37,6 @@ defmodule TantivyEx.IndexWriter do
       {:error, reason} -> {:error, reason}
       writer -> {:ok, writer}
     end
-  rescue
-    e -> {:error, "Failed to create index writer: #{inspect(e)}"}
   end
 
   @doc """
@@ -64,11 +62,7 @@ defmodule TantivyEx.IndexWriter do
     case Native.writer_add_document(writer, document) do
       :ok -> :ok
       {:error, reason} -> {:error, reason}
-      # Temporary handling
-      _ -> :ok
     end
-  rescue
-    e -> {:error, "Failed to add document: #{inspect(e)}"}
   end
 
   @doc """
@@ -91,11 +85,7 @@ defmodule TantivyEx.IndexWriter do
     case Native.writer_commit(writer) do
       :ok -> :ok
       {:error, reason} -> {:error, reason}
-      # Temporary handling
-      _ -> :ok
     end
-  rescue
-    e -> {:error, "Failed to commit: #{inspect(e)}"}
   end
 
   @doc """
@@ -120,10 +110,7 @@ defmodule TantivyEx.IndexWriter do
     case Native.writer_delete_documents(writer, query) do
       :ok -> :ok
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
-  rescue
-    e -> {:error, "Failed to delete documents: #{inspect(e)}"}
   end
 
   @doc """
@@ -148,10 +135,7 @@ defmodule TantivyEx.IndexWriter do
     case Native.writer_delete_all_documents(writer) do
       :ok -> :ok
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
-  rescue
-    e -> {:error, "Failed to delete all documents: #{inspect(e)}"}
   end
 
   @doc """
@@ -174,9 +158,6 @@ defmodule TantivyEx.IndexWriter do
     case Native.writer_rollback(writer) do
       :ok -> :ok
       {:error, reason} -> {:error, reason}
-      _ -> :ok
     end
-  rescue
-    e -> {:error, "Failed to rollback: #{inspect(e)}"}
   end
 end

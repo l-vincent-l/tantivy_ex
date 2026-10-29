@@ -54,8 +54,6 @@ defmodule TantivyEx.Facet do
       {:error, reason} -> {:error, reason}
       collector_ref -> {:ok, collector_ref}
     end
-  rescue
-    e -> {:error, "Failed to create facet collector: #{inspect(e)}"}
   end
 
   @doc """
@@ -80,8 +78,6 @@ defmodule TantivyEx.Facet do
       :ok -> :ok
       {:error, reason} -> {:error, reason}
     end
-  rescue
-    e -> {:error, "Failed to add facet: #{inspect(e)}"}
   end
 
   @doc """
@@ -112,8 +108,6 @@ defmodule TantivyEx.Facet do
       {:error, reason} ->
         {:error, reason}
     end
-  rescue
-    e -> {:error, "Failed to perform faceted search: #{inspect(e)}"}
   end
 
   @doc """
@@ -197,8 +191,6 @@ defmodule TantivyEx.Facet do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create facet term query: #{inspect(e)}"}
   end
 
   @doc """
@@ -233,8 +225,6 @@ defmodule TantivyEx.Facet do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create multi-facet query: #{inspect(e)}"}
   end
 
   @doc """
@@ -294,8 +284,6 @@ defmodule TantivyEx.Facet do
       {:error, reason} -> {:error, reason}
       facet_ref -> {:ok, facet_ref}
     end
-  rescue
-    e -> {:error, "Failed to create facet from text: #{inspect(e)}"}
   end
 
   @doc """
@@ -317,7 +305,5 @@ defmodule TantivyEx.Facet do
       {:error, reason} -> {:error, reason}
       facet_string -> {:ok, facet_string}
     end
-  rescue
-    e -> {:error, "Failed to convert facet to string: #{inspect(e)}"}
   end
 end

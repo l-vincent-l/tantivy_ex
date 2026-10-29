@@ -76,8 +76,6 @@ defmodule TantivyEx.Query do
       {:error, error_reason} -> {:error, "Failed to create term query: #{error_reason}"}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create term query: #{inspect(e)}"}
   end
 
   # Query Parser Functions
@@ -104,8 +102,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       parser_ref -> {:ok, parser_ref}
     end
-  rescue
-    e -> {:error, "Failed to create query parser: #{inspect(e)}"}
   end
 
   @doc """
@@ -136,8 +132,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to parse query: #{inspect(e)}"}
   end
 
   @doc """
@@ -174,8 +168,6 @@ defmodule TantivyEx.Query do
         query_ref -> {:ok, query_ref}
       end
     end
-  rescue
-    e -> {:error, "Failed to create phrase query: #{inspect(e)}"}
   end
 
   # Range Queries
@@ -205,8 +197,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create u64 range query: #{inspect(e)}"}
   end
 
   @doc """
@@ -226,8 +216,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create i64 range query: #{inspect(e)}"}
   end
 
   @doc """
@@ -247,8 +235,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create f64 range query: #{inspect(e)}"}
   end
 
   # Boolean Queries
@@ -281,8 +267,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create boolean query: #{inspect(e)}"}
   end
 
   # Advanced Query Types
@@ -316,8 +300,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create fuzzy query: #{inspect(e)}"}
   end
 
   @doc """
@@ -343,8 +325,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create wildcard query: #{inspect(e)}"}
   end
 
   @doc """
@@ -369,8 +349,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create regex query: #{inspect(e)}"}
   end
 
   @doc """
@@ -398,8 +376,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create phrase prefix query: #{inspect(e)}"}
   end
 
   @doc """
@@ -432,8 +408,6 @@ defmodule TantivyEx.Query do
       # Fallback for any errors
       _, e -> {:error, "Failed to create exists query: #{inspect(e)}"}
     end
-  rescue
-    e -> {:error, "Failed to create exists query: #{inspect(e)}"}
   end
 
   # Special Queries
@@ -515,8 +489,6 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create more-like-this query: #{inspect(e)}"}
   end
 
   # Facet Queries
@@ -545,7 +517,5 @@ defmodule TantivyEx.Query do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end
-  rescue
-    e -> {:error, "Failed to create facet term query: #{inspect(e)}"}
   end
 end

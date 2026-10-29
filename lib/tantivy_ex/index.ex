@@ -35,8 +35,6 @@ defmodule TantivyEx.Index do
       {:error, reason} -> {:error, reason}
       index -> {:ok, index}
     end
-  rescue
-    e -> {:error, "Failed to create index: #{inspect(e)}"}
   end
 
   @doc """
@@ -63,8 +61,6 @@ defmodule TantivyEx.Index do
       {:error, reason} -> {:error, reason}
       index -> {:ok, index}
     end
-  rescue
-    e -> {:error, "Failed to create RAM index: #{inspect(e)}"}
   end
 
   @doc """
@@ -89,8 +85,6 @@ defmodule TantivyEx.Index do
       {:error, reason} -> {:error, reason}
       index -> {:ok, index}
     end
-  rescue
-    e -> {:error, "Failed to open index: #{inspect(e)}"}
   end
 
   @doc """
@@ -124,7 +118,5 @@ defmodule TantivyEx.Index do
       {:error, reason} -> {:error, reason}
       index -> {:ok, index}
     end
-  rescue
-    e -> {:error, "Failed to open or create index: #{inspect(e)}"}
   end
 end

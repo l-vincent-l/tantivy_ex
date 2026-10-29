@@ -116,17 +116,13 @@ defmodule TantivyEx.SearchResults do
   def process(results, schema, options) do
     opts = Keyword.merge(@default_options, options)
 
-    try do
-      processed_results =
-        results
-        |> Enum.map(&normalize_result(&1, schema, opts))
-        |> Enum.map(&convert_field_types(&1, schema, opts))
-        |> maybe_normalize_scores(opts)
+    processed_results =
+      results
+      |> Enum.map(&normalize_result(&1, schema, opts))
+      |> Enum.map(&convert_field_types(&1, schema, opts))
+      |> maybe_normalize_scores(opts)
 
-      {:ok, processed_results}
-    rescue
-      e -> {:error, "Failed to process results: #{inspect(e)}"}
-    end
+    {:ok, processed_results}
   end
 
   @doc """
@@ -259,20 +255,16 @@ defmodule TantivyEx.SearchResults do
       {:ok, agg_results} = TantivyEx.Aggregation.run(searcher, query, aggregations)
   """
   @spec aggregate([map()], [String.t()]) :: {:ok, map()} | {:error, String.t()}
-  def aggregate(results, facet_fields) when is_list(facet_fields) do
-    try do
-      facets =
-        facet_fields
-        |> Enum.reduce(%{}, fn field_name, acc ->
-          field_values = extract_field_values(results, field_name)
-          field_counts = Enum.frequencies(field_values)
-          Map.put(acc, field_name, field_counts)
-        end)
+  def aggregate(results, facet_fields) when is_list(results) and is_list(facet_fields) do
+    facets =
+      facet_fields
+      |> Enum.reduce(%{}, fn field_name, acc ->
+        field_values = extract_field_values(results, field_name)
+        field_counts = Enum.frequencies(field_values)
+        Map.put(acc, field_name, field_counts)
+      end)
 
-      {:ok, facets}
-    rescue
-      e -> {:error, "Failed to aggregate results: #{inspect(e)}"}
-    end
+    {:ok, facets}
   end
 
   @doc """
@@ -299,35 +291,31 @@ defmodule TantivyEx.SearchResults do
   """
   @spec format_for_api([map()], keyword()) :: {:ok, map()} | {:error, String.t()}
   def format_for_api(results, options \\ []) do
-    try do
-      metadata = %{
-        total_count: length(results),
-        max_score: calculate_max_score(results),
-        min_score: calculate_min_score(results),
-        avg_score: calculate_avg_score(results)
-      }
+    metadata = %{
+      total_count: length(results),
+      max_score: calculate_max_score(results),
+      min_score: calculate_min_score(results),
+      avg_score: calculate_avg_score(results)
+    }
 
-      # Add optional metadata
-      metadata =
-        options
-        |> Enum.reduce(metadata, fn {key, value}, acc ->
-          case key do
-            :query -> Map.put(acc, :query, value)
-            :execution_time_ms -> Map.put(acc, :execution_time_ms, value)
-            :search_type -> Map.put(acc, :search_type, value)
-            _ -> acc
-          end
-        end)
+    # Add optional metadata
+    metadata =
+      options
+      |> Enum.reduce(metadata, fn {key, value}, acc ->
+        case key do
+          :query -> Map.put(acc, :query, value)
+          :execution_time_ms -> Map.put(acc, :execution_time_ms, value)
+          :search_type -> Map.put(acc, :search_type, value)
+          _ -> acc
+        end
+      end)
 
-      response = %{
-        results: results,
-        metadata: metadata
-      }
+    response = %{
+      results: results,
+      metadata: metadata
+    }
 
-      {:ok, response}
-    rescue
-      e -> {:error, "Failed to format results: #{inspect(e)}"}
-    end
+    {:ok, response}
   end
 
   @doc """
