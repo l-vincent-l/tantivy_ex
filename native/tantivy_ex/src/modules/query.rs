@@ -48,7 +48,7 @@ pub fn query_parser_new(
     }
 
     // Create the parser using fields we found
-    let parser = QueryParser::for_index(&*index_res.index, fields);
+    let parser = QueryParser::for_index(&index_res.index, fields);
     Ok(ResourceArc::new(QueryParserResource { parser }))
 }
 
@@ -111,24 +111,24 @@ pub fn query_term(
                         ));
                     }
                     let boolean_query = BooleanQuery::new(clauses);
-                    return Ok(ResourceArc::new(QueryResource {
+                    Ok(ResourceArc::new(QueryResource {
                         query: Box::new(boolean_query),
-                    }));
+                    }))
                 } else {
                     // Single word - create term query with lowercase normalization
                     let term = TantivyTerm::from_field_text(field, &term_value.to_lowercase());
                     let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-                    return Ok(ResourceArc::new(QueryResource {
+                    Ok(ResourceArc::new(QueryResource {
                         query: Box::new(query),
-                    }));
+                    }))
                 }
             } else {
                 // Non-tokenized text field - use exact value
                 let term = TantivyTerm::from_field_text(field, &term_value);
                 let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-                return Ok(ResourceArc::new(QueryResource {
+                Ok(ResourceArc::new(QueryResource {
                     query: Box::new(query),
-                }));
+                }))
             }
         }
         FieldType::U64(_) => {
@@ -147,9 +147,9 @@ pub fn query_term(
                 }
             };
             let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-            return Ok(ResourceArc::new(QueryResource {
+            Ok(ResourceArc::new(QueryResource {
                 query: Box::new(query),
-            }));
+            }))
         }
         FieldType::I64(_) => {
             let term = match term_value.parse::<i64>() {
@@ -162,9 +162,9 @@ pub fn query_term(
                 }
             };
             let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-            return Ok(ResourceArc::new(QueryResource {
+            Ok(ResourceArc::new(QueryResource {
                 query: Box::new(query),
-            }));
+            }))
         }
         FieldType::F64(_) => {
             let term = match term_value.parse::<f64>() {
@@ -177,9 +177,9 @@ pub fn query_term(
                 }
             };
             let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-            return Ok(ResourceArc::new(QueryResource {
+            Ok(ResourceArc::new(QueryResource {
                 query: Box::new(query),
-            }));
+            }))
         }
         FieldType::Bool(_) => {
             // Be more lenient with boolean parsing
@@ -195,9 +195,9 @@ pub fn query_term(
                 }
             };
             let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-            return Ok(ResourceArc::new(QueryResource {
+            Ok(ResourceArc::new(QueryResource {
                 query: Box::new(query),
-            }));
+            }))
         }
         FieldType::Date(_) => {
             let term = match term_value.parse::<i64>() {
@@ -213,16 +213,14 @@ pub fn query_term(
                 }
             };
             let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-            return Ok(ResourceArc::new(QueryResource {
+            Ok(ResourceArc::new(QueryResource {
                 query: Box::new(query),
-            }));
+            }))
         }
-        _ => {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Unsupported field type for term query on field '{}': {:?}",
-                field_name, field_type
-            ))))
-        }
+        _ => Err(rustler::Error::Term(Box::new(format!(
+            "Unsupported field type for term query on field '{}': {:?}",
+            field_name, field_type
+        )))),
     }
 }
 
@@ -527,6 +525,8 @@ pub fn query_empty() -> ResourceArc<QueryResource> {
     })
 }
 
+// One argument per option of TantivyEx.Query.more_like_this/3
+#[allow(clippy::too_many_arguments)]
 #[rustler::nif]
 pub fn query_more_like_this(
     schema_res: ResourceArc<SchemaResource>,
@@ -577,12 +577,10 @@ pub fn query_more_like_this(
                     }
                     serde_json::Value::Array(arr) => {
                         // Handle arrays by adding each element
+                        // Non-string array elements are skipped for now
                         for item in arr {
-                            match item {
-                                serde_json::Value::String(s) => {
-                                    field_values.push(OwnedValue::Str(s));
-                                }
-                                _ => {} // Skip non-string array elements for now
+                            if let serde_json::Value::String(s) = item {
+                                field_values.push(OwnedValue::Str(s));
                             }
                         }
                     }

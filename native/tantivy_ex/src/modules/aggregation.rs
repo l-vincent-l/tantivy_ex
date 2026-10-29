@@ -72,7 +72,7 @@ pub fn run_aggregations<'a>(
     };
 
     let tantivy_aggregations =
-        match build_tantivy_aggregations(&aggregation_requests, &searcher_res.searcher.schema()) {
+        match build_tantivy_aggregations(&aggregation_requests, searcher_res.searcher.schema()) {
             Ok(aggs) => aggs,
             Err(e) => return Ok(format!("Error building aggregations: {}", e).encode(env)),
         };
@@ -111,7 +111,7 @@ pub fn run_search_with_aggregations<'a>(
     };
 
     let tantivy_aggregations =
-        match build_tantivy_aggregations(&aggregation_requests, &searcher_res.searcher.schema()) {
+        match build_tantivy_aggregations(&aggregation_requests, searcher_res.searcher.schema()) {
             Ok(aggs) => aggs,
             Err(e) => return Ok(format!("Error building aggregations: {}", e).encode(env)),
         };

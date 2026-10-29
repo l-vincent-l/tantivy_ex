@@ -173,15 +173,11 @@ pub fn writer_delete_term<'a>(
 
                     // Perform the deletion using query
                     match writer.delete_query(query) {
-                        Ok(_opstamp) => {
-                            return Ok(atoms::ok().encode(env));
-                        }
-                        Err(e) => {
-                            return Err(rustler::Error::Term(Box::new(format!(
-                                "Failed to delete by query: {}",
-                                e
-                            ))));
-                        }
+                        Ok(_opstamp) => Ok(atoms::ok().encode(env)),
+                        Err(e) => Err(rustler::Error::Term(Box::new(format!(
+                            "Failed to delete by query: {}",
+                            e
+                        )))),
                     }
                 } else {
                     // Non-tokenized text field - use term deletion
@@ -190,12 +186,12 @@ pub fn writer_delete_term<'a>(
                     // Perform the deletion
                     let _opstamp = writer.delete_term(tantivy_term.clone());
 
-                    return Ok(atoms::ok().encode(env));
+                    Ok(atoms::ok().encode(env))
                 }
             } else {
-                return Err(rustler::Error::Term(Box::new(
+                Err(rustler::Error::Term(Box::new(
                     "Invalid string value for text field".to_string(),
-                )));
+                )))
             }
         }
         FieldType::U64(_) => {
@@ -229,7 +225,7 @@ pub fn writer_delete_term<'a>(
             // Perform the deletion
             let _opstamp = writer.delete_term(tantivy_term.clone());
 
-            return Ok(atoms::ok().encode(env));
+            Ok(atoms::ok().encode(env))
         }
         FieldType::I64(_) => {
             let tantivy_term = if let Ok(int_val) = term_value.decode::<i64>() {
@@ -256,7 +252,7 @@ pub fn writer_delete_term<'a>(
             // Perform the deletion
             let _opstamp = writer.delete_term(tantivy_term.clone());
 
-            return Ok(atoms::ok().encode(env));
+            Ok(atoms::ok().encode(env))
         }
         FieldType::F64(_) => {
             let tantivy_term = if let Ok(float_val) = term_value.decode::<f64>() {
@@ -283,7 +279,7 @@ pub fn writer_delete_term<'a>(
             // Perform the deletion
             let _opstamp = writer.delete_term(tantivy_term.clone());
 
-            return Ok(atoms::ok().encode(env));
+            Ok(atoms::ok().encode(env))
         }
         FieldType::Bool(_) => {
             let tantivy_term = if let Ok(bool_val) = term_value.decode::<bool>() {
@@ -310,7 +306,7 @@ pub fn writer_delete_term<'a>(
             // Perform the deletion
             let _opstamp = writer.delete_term(tantivy_term.clone());
 
-            return Ok(atoms::ok().encode(env));
+            Ok(atoms::ok().encode(env))
         }
         FieldType::Date(_) => {
             let tantivy_term = if let Ok(timestamp) = term_value.decode::<i64>() {
@@ -340,15 +336,13 @@ pub fn writer_delete_term<'a>(
             // Perform the deletion
             let _opstamp = writer.delete_term(tantivy_term.clone());
 
-            return Ok(atoms::ok().encode(env));
+            Ok(atoms::ok().encode(env))
         }
-        _ => {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Unsupported field type for deletion: {:?}",
-                field_type
-            ))));
-        }
-    };
+        _ => Err(rustler::Error::Term(Box::new(format!(
+            "Unsupported field type for deletion: {:?}",
+            field_type
+        )))),
+    }
 }
 
 #[rustler::nif(schedule = "DirtyIo")]
@@ -442,7 +436,7 @@ pub fn validate_document_against_schema<'a>(
     }
 }
 
-/// Helper functions for document operations
+// Helper functions for document operations
 
 /// Builds a Tantivy document from an Elixir map of field names to values.
 ///

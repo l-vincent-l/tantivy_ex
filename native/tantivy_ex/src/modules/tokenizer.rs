@@ -21,7 +21,9 @@ lazy_static! {
 // A panic cannot leave the registry half-updated (a set of names, changed by
 // single inserts): it stays usable after one.
 fn registry() -> MutexGuard<'static, HashSet<String>> {
-    TOKENIZER_REGISTRY.lock().unwrap_or_else(PoisonError::into_inner)
+    TOKENIZER_REGISTRY
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
 }
 
 // Helper function to register a tokenizer and track its name
