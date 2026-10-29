@@ -699,16 +699,7 @@ pub fn facet_term_query(
     field_name: String,
     facet_path: String,
 ) -> NifResult<ResourceArc<QueryResource>> {
-    // Get the field from the schema
-    let field = match schema_res.schema.get_field(&field_name) {
-        Ok(f) => f,
-        Err(_) => {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Field '{}' not found in schema",
-                field_name
-            ))))
-        }
-    };
+    let field = crate::modules::facet::facet_field(&schema_res.schema, &field_name)?;
 
     // Parse the facet from the path string
     let facet = match tantivy::schema::Facet::from_text(&facet_path) {

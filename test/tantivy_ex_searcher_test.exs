@@ -145,6 +145,37 @@ defmodule TantivyEx.SearcherTest do
     end
   end
 
+  describe "multi_facet_query/4" do
+    defp facet_ids(searcher, {:ok, query}) do
+      {:ok, results} = Searcher.search(searcher, query, 10)
+      ids(results)
+    end
+
+    test "combines the facets with the occur", %{schema: schema, searcher: searcher} do
+      query = &Facet.multi_facet_query(schema, "category", &1, &2)
+
+      assert facet_ids(searcher, query.(["/lang/fr", "/lang/en"], :should)) == [1, 2, 3]
+      # A facet matches its descendants
+      assert facet_ids(searcher, query.(["/lang", "/lang/fr"], :must)) == [3]
+      assert facet_ids(searcher, query.(["/lang/fr"], :must_not)) == [1, 2]
+    end
+
+    test "searches the facet field only", %{schema: schema, searcher: searcher} do
+      # "title", the first field, has the token "hello": a facet term "/hello"
+      # must not match it
+      assert facet_ids(searcher, Facet.multi_facet_query(schema, "category", ["/hello"], :should)) ==
+               []
+    end
+
+    test "rejects a field that is not a facet field", %{schema: schema} do
+      assert {:error, "Field 'title' is not a facet field"} =
+               Facet.multi_facet_query(schema, "title", ["/hello"], :should)
+
+      assert {:error, "Field 'title' is not a facet field"} =
+               Query.facet_term(schema, "title", "/hello")
+    end
+  end
+
   describe "facet collector" do
     test "counts the added facets", %{searcher: searcher} do
       {:ok, collector} = Facet.collector_for_field("category")

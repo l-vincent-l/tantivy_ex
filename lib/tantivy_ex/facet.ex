@@ -188,12 +188,15 @@ defmodule TantivyEx.Facet do
   end
 
   @doc """
-  Creates a multi-facet boolean query for filtering by multiple facets.
+  Creates a query matching the documents with some of the facets, or their
+  descendants.
 
   ## Parameters
+  - `schema` - The schema of the index
   - `field_name` - The facet field name
   - `facet_paths` - List of facet paths to filter by
-  - `occur` - How to combine the facets (:should, :must, :must_not)
+  - `occur` - How to combine the facets: `:should` matches the documents with
+    any of them, `:must` with all of them, `:must_not` with none of them
 
   ## Returns
   - `{:ok, query_ref}` on success
@@ -201,21 +204,14 @@ defmodule TantivyEx.Facet do
 
   ## Example
       facets = ["/electronics/laptops", "/electronics/tablets"]
-      {:ok, multi_query} = TantivyEx.Facet.multi_facet_query("category", facets, :should)
+      {:ok, multi_query} = TantivyEx.Facet.multi_facet_query(schema, "category", facets, :should)
   """
-  @spec multi_facet_query(String.t(), [String.t()], atom()) ::
+  @spec multi_facet_query(reference(), String.t(), [String.t()], :should | :must | :must_not) ::
           {:ok, reference()} | {:error, String.t()}
-  def multi_facet_query(field_name, facet_paths, occur)
-      when is_binary(field_name) and is_list(facet_paths) and is_atom(occur) do
-    occur_str =
-      case occur do
-        :should -> "should"
-        :must -> "must"
-        :must_not -> "must_not"
-        _ -> "should"
-      end
-
-    case Native.facet_multi_query(field_name, facet_paths, occur_str) do
+  def multi_facet_query(schema, field_name, facet_paths, occur)
+      when is_binary(field_name) and is_list(facet_paths) and
+             occur in [:should, :must, :must_not] do
+    case Native.facet_multi_query(schema, field_name, facet_paths, Atom.to_string(occur)) do
       {:error, reason} -> {:error, reason}
       query_ref -> {:ok, query_ref}
     end

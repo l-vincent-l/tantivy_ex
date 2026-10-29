@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **HTML-escaped highlights in `SearchResults.enhance/4`** - With `highlight: true`, the passages of `"highlights"` inserted the `<mark>` tags in the text of the documents without escaping it: rendered as HTML, as highlights must be, markup in an indexed document (`<img src=x onerror=...>`) ran in the browser of whoever searched it (stored XSS). The text is now HTML-escaped, and the terms are matched in one pass, so that tags are never inserted inside markup or other tags.
 
+- **`Facet.multi_facet_query/4` searches its facet field** - `multi_facet_query/3` ignored its field: it searched the first field of the schema, where a facet `/public` matched the text token "public". It also ignored its occur, so that `:must` matched any of the facets and `:must_not` the documents with them. It now takes the schema (`multi_facet_query(schema, field_name, facet_paths, occur)`), searches the facet field, and combines the facets with the occur. It and `Query.facet_term/3` return an error for a field that is not a facet field.
+
 ### Removed
 
 - **The Performance Tuning, Production Deployment and Integration Patterns guides** - Mostly generic advice and architectures around calls to functions that did not exist; the useful advice is in the README.

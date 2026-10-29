@@ -2,11 +2,11 @@ use rustler::{NifResult, ResourceArc};
 use serde_json;
 use std::sync::{Mutex, PoisonError};
 use tantivy::collector::FacetCollector;
-use tantivy::query::{BooleanQuery, Occur};
-use tantivy::schema::Facet;
+use tantivy::query::{AllQuery, BooleanQuery, Occur, Query, TermQuery};
+use tantivy::schema::{Facet, Field, FieldType, IndexRecordOption, Schema};
 use tantivy::Term as TantivyTerm;
 
-use crate::modules::resources::{json_to_term, QueryResource, SearcherResource};
+use crate::modules::resources::{json_to_term, QueryResource, SchemaResource, SearcherResource};
 
 /// The field and facets of a FacetCollector, built for each search: the
 /// resource is not locked while searching.
@@ -131,44 +131,73 @@ fn insert_facet_hierarchically(
 }
 
 /// Creates a multi-facet boolean query
+/// The field named `field_name`, which must be a facet field: a facet term on
+/// another field would match its own terms (the text token "public" for the
+/// facet "/public").
+pub fn facet_field(schema: &Schema, field_name: &str) -> NifResult<Field> {
+    let field = schema.get_field(field_name).map_err(|_| {
+        rustler::Error::Term(Box::new(format!(
+            "Field '{}' not found in schema",
+            field_name
+        )))
+    })?;
+
+    match schema.get_field_entry(field).field_type() {
+        FieldType::Facet(_) => Ok(field),
+        _ => Err(rustler::Error::Term(Box::new(format!(
+            "Field '{}' is not a facet field",
+            field_name
+        )))),
+    }
+}
+
+/// A query matching the documents with the facets (or their descendants),
+/// combined with `occur`: any of them ("should"), all of them ("must"), or
+/// none of them ("must_not").
 #[rustler::nif]
 pub fn facet_multi_query(
-    _field_name: String,
+    schema_res: ResourceArc<SchemaResource>,
+    field_name: String,
     facet_paths: Vec<String>,
     occur_str: String,
 ) -> NifResult<ResourceArc<QueryResource>> {
-    let _occur = match occur_str.as_str() {
+    let field = facet_field(&schema_res.schema, &field_name)?;
+
+    let occur = match occur_str.as_str() {
         "should" => Occur::Should,
         "must" => Occur::Must,
         "must_not" => Occur::MustNot,
-        _ => Occur::Should,
+        _ => {
+            return Err(rustler::Error::Term(Box::new(format!(
+                "Invalid occur '{}': expected should, must or must_not",
+                occur_str
+            ))))
+        }
     };
 
-    let mut terms = Vec::new();
+    let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
     for facet_path in facet_paths {
-        let facet = match Facet::from_text(&facet_path) {
-            Ok(f) => f,
-            Err(e) => {
-                return Err(rustler::Error::Term(Box::new(format!(
-                    "Invalid facet path '{}': {}",
-                    facet_path, e
-                ))))
-            }
-        };
-
-        let term = TantivyTerm::from_facet(
-            tantivy::schema::Field::from_field_id(0), // This needs proper field resolution
-            &facet,
-        );
-        terms.push(term);
+        let facet = Facet::from_text(&facet_path).map_err(|e| {
+            rustler::Error::Term(Box::new(format!(
+                "Invalid facet path '{}': {}",
+                facet_path, e
+            )))
+        })?;
+        let term = TantivyTerm::from_facet(field, &facet);
+        clauses.push((
+            occur,
+            Box::new(TermQuery::new(term, IndexRecordOption::Basic)),
+        ));
     }
 
-    let query = BooleanQuery::new_multiterms_query(terms);
-    let query_resource = QueryResource {
-        query: Box::new(query),
-    };
+    // Excluded clauses alone match nothing: they exclude from all documents
+    if occur == Occur::MustNot {
+        clauses.push((Occur::Must, Box::new(AllQuery)));
+    }
 
-    Ok(ResourceArc::new(query_resource))
+    Ok(ResourceArc::new(QueryResource {
+        query: Box::new(BooleanQuery::new(clauses)),
+    }))
 }
 
 /// Creates a facet from text
