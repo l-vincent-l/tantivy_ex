@@ -128,19 +128,9 @@ defmodule TantivyEx.QueryTypesTest do
       assert is_list(results)
     end
 
-    test "handles invalid range (start > end)", %{schema: schema} do
-      # This should either create a valid empty range or return error
-      result = Query.range_u64(schema, "price", 300, 200)
-
-      case result do
-        {:ok, query} ->
-          # Valid empty range query
-          assert is_reference(query)
-
-        {:error, reason} ->
-          # Error is also acceptable
-          assert is_binary(reason)
-      end
+    test "an empty range (start > end) matches nothing", %{schema: schema, searcher: searcher} do
+      assert {:ok, query} = Query.range_u64(schema, "price", 300, 200)
+      assert {:ok, []} = Searcher.search(searcher, query, 10)
     end
   end
 
