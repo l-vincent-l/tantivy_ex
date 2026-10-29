@@ -7,11 +7,13 @@ use tantivy::query::{
     PhrasePrefixQuery, PhraseQuery, QueryParser, RangeQuery, RegexQuery, TermQuery,
 };
 use tantivy::schema::{FieldType, OwnedValue};
+use tantivy::tokenizer::TokenStream;
 use tantivy::Term as TantivyTerm;
 
 use crate::modules::resources::{
     IndexResource, QueryParserResource, QueryResource, SchemaResource,
 };
+use crate::modules::tokenizer::global_tokenizer_manager;
 
 /// Query system functions
 
@@ -92,58 +94,46 @@ pub fn query_term(
     let field_entry = schema_res.schema.get_field_entry(field);
     let field_type = field_entry.field_type();
 
-    // For tokenized text fields with multiple words, create a phrase query instead of a term query
     match field_type {
         FieldType::Str(text_options) => {
-            if let Some(_indexing) = text_options.get_indexing_options() {
-                // For tokenized fields
-                let words: Vec<&str> = term_value.split_whitespace().collect();
-                if words.len() > 1 {
-                    // Multi-word search on tokenized field - create boolean query with individual terms
-                    let mut clauses = Vec::new();
-                    for word in words {
-                        let term = TantivyTerm::from_field_text(field, &word.to_lowercase());
-                        let term_query =
-                            TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-                        clauses.push((
-                            Occur::Must,
-                            Box::new(term_query) as Box<dyn tantivy::query::Query>,
-                        ));
-                    }
-                    let boolean_query = BooleanQuery::new(clauses);
-                    Ok(ResourceArc::new(QueryResource {
-                        query: Box::new(boolean_query),
-                    }))
-                } else {
-                    // Single word - create term query with lowercase normalization
-                    let term = TantivyTerm::from_field_text(field, &term_value.to_lowercase());
-                    let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-                    Ok(ResourceArc::new(QueryResource {
-                        query: Box::new(query),
-                    }))
-                }
-            } else {
-                // Non-tokenized text field - use exact value
-                let term = TantivyTerm::from_field_text(field, &term_value);
+            let indexing = text_options.get_indexing_options().ok_or_else(|| {
+                rustler::Error::Term(Box::new(format!("Field '{}' is not indexed", field_name)))
+            })?;
+            let mut tokenizer = global_tokenizer_manager()
+                .get(indexing.tokenizer())
+                .ok_or_else(|| {
+                    rustler::Error::Term(Box::new(format!(
+                        "Tokenizer '{}' of field '{}' is not registered",
+                        indexing.tokenizer(),
+                        field_name
+                    )))
+                })?;
+
+            // The value is analyzed like the indexed text: each of its tokens
+            // must be in the field
+            let mut token_stream = tokenizer.token_stream(&term_value);
+            let mut clauses: Vec<(Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
+            while let Some(token) = token_stream.next() {
+                let term = TantivyTerm::from_field_text(field, &token.text);
                 let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);
-                Ok(ResourceArc::new(QueryResource {
-                    query: Box::new(query),
-                }))
+                clauses.push((Occur::Must, Box::new(query)));
             }
+
+            let query: Box<dyn tantivy::query::Query> = match clauses.len() {
+                0 => Box::new(EmptyQuery),
+                1 => clauses.pop().unwrap().1,
+                _ => Box::new(BooleanQuery::new(clauses)),
+            };
+            Ok(ResourceArc::new(QueryResource { query }))
         }
         FieldType::U64(_) => {
             let term = match term_value.parse::<u64>() {
                 Ok(val) => TantivyTerm::from_field_u64(field, val),
                 Err(_) => {
-                    // Try to be more lenient with parsing to handle various cases in tests
-                    let clean_value = term_value.trim().trim_matches(|c| c == '"' || c == '\'');
-                    match clean_value.parse::<u64>() {
-                        Ok(val) => TantivyTerm::from_field_u64(field, val),
-                        Err(_) => {
-                            // For tests to pass, fall back to text representation
-                            TantivyTerm::from_field_text(field, &term_value)
-                        }
-                    }
+                    return Err(rustler::Error::Term(Box::new(format!(
+                        "Invalid u64 value for field '{}': {:?}",
+                        field_name, term_value
+                    ))))
                 }
             };
             let query = TermQuery::new(term, tantivy::schema::IndexRecordOption::Basic);

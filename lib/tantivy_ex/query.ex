@@ -51,15 +51,20 @@ defmodule TantivyEx.Query do
   @type parser :: reference()
 
   @doc """
-  Creates a term query for exact matching.
+  Creates a term query, matching documents whose field contains the value.
 
-  Term queries match documents where the specified field contains the exact term.
+  On a text field, the value is analyzed with the field's tokenizer, as the
+  indexed text was: lowercased by `"default"`, stemmed by `"en_stem"` or
+  `"fr_stem"`, kept as is by `"raw"`... Every token of the value must be in
+  the field; a value without tokens matches nothing. On other fields, the
+  value is parsed for the field's type (`"42"` for a `u64` field), and an
+  invalid value is an error.
 
   ## Parameters
 
   - `schema`: The schema containing the field
   - `field_name`: The name of the field to search
-  - `term_value`: The exact term to match
+  - `term_value`: The value to match
 
   ## Examples
 
