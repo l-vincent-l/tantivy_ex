@@ -4,7 +4,7 @@ use tantivy::schema::{
     JsonObjectOptions, NumericOptions, Schema, TextFieldIndexing, TextOptions,
 };
 
-use crate::modules::resources::{error, SchemaResource};
+use crate::resources::{SchemaResource, error};
 
 /// The indexing of text fields: with term frequencies and positions, as
 /// Tantivy's `TEXT`, for BM25 scoring and phrase queries.
@@ -12,7 +12,6 @@ fn text_indexing() -> TextFieldIndexing {
     TextFieldIndexing::default().set_index_option(IndexRecordOption::WithFreqsAndPositions)
 }
 
-/// Schema building functions
 #[rustler::nif]
 pub fn schema_builder_new() -> rustler::ResourceArc<SchemaResource> {
     let schema = Schema::builder().build();
@@ -25,7 +24,6 @@ pub fn schema_add_text_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    // Parse options for the new field
     let field_options = match options.as_str() {
         "TEXT_STORED" => TextOptions::default()
             .set_indexing_options(text_indexing())
@@ -43,7 +41,7 @@ pub fn schema_add_text_field(
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
                 other, field_name
-            )))
+            )));
         }
     };
 
@@ -59,7 +57,6 @@ pub fn schema_add_text_field_with_tokenizer(
     options: String,
     tokenizer: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    // Parse options and configure with custom tokenizer
     let field_options = match options.as_str() {
         "TEXT_STORED" => TextOptions::default()
             .set_indexing_options(text_indexing().set_tokenizer(&tokenizer))
@@ -75,7 +72,7 @@ pub fn schema_add_text_field_with_tokenizer(
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
                 other, field_name
-            )))
+            )));
         }
     };
 
@@ -90,7 +87,6 @@ pub fn schema_add_u64_field(
     field_name: String,
     options: String,
 ) -> NifResult<ResourceArc<SchemaResource>> {
-    // Parse options for the new field
     let field_options = match options.as_str() {
         "INDEXED_STORED" => NumericOptions::default().set_indexed().set_stored(),
         "INDEXED" => NumericOptions::default().set_indexed(),
@@ -101,7 +97,7 @@ pub fn schema_add_u64_field(
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
                 other, field_name
-            )))
+            )));
         }
     };
 
@@ -126,7 +122,7 @@ pub fn schema_add_i64_field(
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
                 other, field_name
-            )))
+            )));
         }
     };
 
@@ -151,7 +147,7 @@ pub fn schema_add_f64_field(
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
                 other, field_name
-            )))
+            )));
         }
     };
 
@@ -176,7 +172,7 @@ pub fn schema_add_bool_field(
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
                 other, field_name
-            )))
+            )));
         }
     };
 
@@ -201,7 +197,7 @@ pub fn schema_add_date_field(
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
                 other, field_name
-            )))
+            )));
         }
     };
 
@@ -240,7 +236,7 @@ pub fn schema_add_bytes_field(
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
                 other, field_name
-            )))
+            )));
         }
     };
 
@@ -265,7 +261,7 @@ pub fn schema_add_json_field(
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
                 other, field_name
-            )))
+            )));
         }
     };
 
@@ -290,7 +286,7 @@ pub fn schema_add_ip_addr_field(
             return Err(error(format!(
                 "Unknown option {:?} for field {:?}",
                 other, field_name
-            )))
+            )));
         }
     };
 
@@ -336,10 +332,7 @@ pub fn schema_get_field_type<'a>(
             };
             Ok(field_type_str.encode(env))
         }
-        Err(_) => Err(rustler::Error::Term(Box::new(format!(
-            "Field '{}' not found in schema",
-            field_name
-        )))),
+        Err(_) => Err(error(format!("Field '{}' not found in schema", field_name))),
     }
 }
 
@@ -351,12 +344,9 @@ pub fn schema_validate<'a>(
     // Basic validation - check if schema has at least one field
     let field_count = schema_res.schema.fields().count();
     if field_count == 0 {
-        return Err(rustler::Error::Term(Box::new(
-            "Schema must have at least one field".to_string(),
-        )));
+        return Err(error("Schema must have at least one field".to_string()));
     }
 
-    // Return success message with field count
     let message = format!("Schema is valid with {} fields", field_count);
     Ok(message.encode(env))
 }

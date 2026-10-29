@@ -11,7 +11,7 @@ defmodule TantivyExRemoveLongTest do
   describe "remove_long_threshold parameter" do
     test "remove_long_threshold accepts integer or nil" do
       # Test that remove_long_threshold accepts a threshold value
-      assert {:ok, _} =
+      assert :ok =
                Tokenizer.register_text_analyzer(
                  "test_remove_long_40",
                  "simple",
@@ -22,7 +22,7 @@ defmodule TantivyExRemoveLongTest do
                )
 
       # Test that remove_long_threshold accepts nil (disabled)
-      assert {:ok, _} =
+      assert :ok =
                Tokenizer.register_text_analyzer(
                  "test_remove_long_disabled",
                  "simple",
@@ -33,7 +33,7 @@ defmodule TantivyExRemoveLongTest do
                )
 
       # Test custom threshold
-      assert {:ok, _} =
+      assert :ok =
                Tokenizer.register_text_analyzer(
                  "test_remove_long_custom",
                  "simple",
@@ -235,7 +235,7 @@ defmodule TantivyExRemoveLongTest do
   describe "unified API with configurable threshold" do
     test "accepts nil threshold to disable filtering" do
       # Register tokenizer with no long word filtering
-      assert {:ok, _} =
+      assert :ok =
                Tokenizer.register_text_analyzer(
                  "no_threshold_filter",
                  "simple",
@@ -276,7 +276,7 @@ defmodule TantivyExRemoveLongTest do
 
       for {threshold, analyzer_name} <- test_cases do
         # Register tokenizer with custom threshold
-        assert {:ok, _} =
+        assert :ok =
                  Tokenizer.register_text_analyzer(
                    analyzer_name,
                    "simple",
@@ -341,7 +341,7 @@ defmodule TantivyExRemoveLongTest do
 
     test "validates threshold parameter type" do
       # Should accept positive integers
-      assert {:ok, _} =
+      assert :ok =
                Tokenizer.register_text_analyzer(
                  "valid_threshold_1",
                  "simple",
@@ -351,7 +351,7 @@ defmodule TantivyExRemoveLongTest do
                  1
                )
 
-      assert {:ok, _} =
+      assert :ok =
                Tokenizer.register_text_analyzer(
                  "valid_threshold_100",
                  "simple",
@@ -362,7 +362,7 @@ defmodule TantivyExRemoveLongTest do
                )
 
       # Should accept nil
-      assert {:ok, _} =
+      assert :ok =
                Tokenizer.register_text_analyzer(
                  "valid_threshold_nil",
                  "simple",
@@ -459,10 +459,10 @@ defmodule TantivyExRemoveLongTest do
 
     test "threshold behavior with convenience functions" do
       # Test stemming tokenizer with threshold
-      assert {:ok, _} = Tokenizer.register_stemming_tokenizer("english", 30)
+      assert :ok = Tokenizer.register_stemming_tokenizer("english", 30)
 
       # Test language analyzer with threshold
-      assert {:ok, _} = Tokenizer.register_language_analyzer("english", 50)
+      assert :ok = Tokenizer.register_language_analyzer("english", 50)
 
       # Test that both work correctly
       # 7 chars

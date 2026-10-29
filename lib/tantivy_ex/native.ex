@@ -70,8 +70,6 @@ defmodule TantivyEx.Native do
   def writer_add_document_with_schema(_writer, _document, _schema),
     do: :erlang.nif_error(:nif_not_loaded)
 
-  def validate_document_against_schema(_document, _schema), do: :erlang.nif_error(:nif_not_loaded)
-
   # Search functions
   def index_reader(_index), do: :erlang.nif_error(:nif_not_loaded)
 
@@ -128,7 +126,6 @@ defmodule TantivyEx.Native do
     do: :erlang.nif_error(:nif_not_loaded)
 
   # Tokenizer functions
-  def tokenizer_manager_new(), do: :erlang.nif_error(:nif_not_loaded)
   def register_simple_tokenizer(_name), do: :erlang.nif_error(:nif_not_loaded)
   def register_whitespace_tokenizer(_name), do: :erlang.nif_error(:nif_not_loaded)
   def register_regex_tokenizer(_name, _pattern), do: :erlang.nif_error(:nif_not_loaded)

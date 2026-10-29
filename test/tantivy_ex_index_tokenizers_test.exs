@@ -7,7 +7,7 @@ defmodule TantivyEx.IndexTokenizersTest do
   @body "Les statuts de l'association. L'école ouvre à huit heures."
 
   setup_all do
-    {:ok, _} = Tokenizer.register_text_analyzer("fr_folded", "simple", true, nil, "fr", 40, true)
+    :ok = Tokenizer.register_text_analyzer("fr_folded", "simple", true, nil, "fr", 40, true)
     :ok
   end
 

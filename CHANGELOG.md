@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Errors** - The functions no longer rescue every exception into `{:error, "Failed to ...: %ArgumentError{...}"}`: a failure returns `{:error, message}` with the message of Tantivy or of the wrapper, and an argument of the wrong type raises, as is usual in Elixir.
 - **Aggregation and facet results are maps built in Rust** - They were serialized to JSON and decoded with Jason. Aggregation errors are `{:error, message}` tuples instead of strings starting with "Error".
 - **Aggregations are Tantivy's** - Requests are deserialized and results serialized by Tantivy, in its Elasticsearch-compatible JSON, instead of being converted by hand for 11 types (`aggregation.rs` goes from 787 to about 110 lines). Every Tantivy aggregation is available (`cardinality`, `extended_stats`, `top_hits`, `filter`, `composite`...), and the Elixir validation no longer rejects them. Results change slightly: `doc_count_error_upper_bound` is `0` instead of `nil`, `range` with `keyed: true` gives a map of buckets, and the hits of `search_with_aggregations/5` have their `"score"`.
+- **`Tokenizer.register_*` functions return `:ok`** - They returned `{:ok, "Tokenizer 'x' registered successfully"}`, or the message alone for `register_default_tokenizers/0`, `register_stemming_tokenizer/2` and `register_language_analyzer/2` (contrary to their own documentation). They all return `:ok`, or `{:error, reason}`.
+- **NIF code** - The modules are in `native/tantivy_ex/src/`, private, so that the compiler reports their dead code; errors and field lookups go through shared helpers; `lazy_static`, `chrono` and `serde` are no longer dependencies (`std::sync::LazyLock`, and the `time` crate Tantivy already uses); Rust edition 2024. The CI runs the crate's unit tests.
 
 ### Security
 
@@ -35,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **`Native.validate_document_against_schema/2` and `Native.tokenizer_manager_new/0`** - They had no caller.
 - **`Tokenizer.process_pre_tokenized_text/1`** - It returned the debug representation of a structure with made-up offsets.
 - **The Performance Tuning, Production Deployment and Integration Patterns guides** - Mostly generic advice and architectures around calls to functions that did not exist; the useful advice is in the README.
 - **`Native.writer_add_document_batch/3`** - It had no caller: `Document.add_batch/4` adds each document.

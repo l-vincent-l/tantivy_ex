@@ -1,9 +1,11 @@
+use tantivy::Term;
 use tantivy::schema::{Facet, Field, FieldType, Schema};
 use tantivy::tokenizer::TokenStream;
-use tantivy::Term;
+use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 
-use crate::modules::resources::convert_ip_to_ipv6;
-use crate::modules::tokenizer::global_tokenizer_manager;
+use crate::resources::convert_ip_to_ipv6;
+use crate::tokenizer::global_tokenizer_manager;
 
 /// The terms of `value` in the field, as they are indexed, for a term query or
 /// a deletion: a text value is analyzed with the field's tokenizer (giving
@@ -63,7 +65,7 @@ pub fn value_terms(
                 "Unsupported field type for a term on field '{}': {:?}",
                 field_name,
                 field_type.value_type()
-            ))
+            ));
         }
     };
 
@@ -117,7 +119,74 @@ fn parse_date(value: &str) -> Option<tantivy::DateTime> {
     if let Ok(timestamp) = value.parse::<i64>() {
         return Some(tantivy::DateTime::from_timestamp_secs(timestamp));
     }
-    chrono::DateTime::parse_from_rfc3339(value)
+    parse_rfc3339(value)
+}
+
+/// An RFC 3339 date (`2024-01-15T10:30:00Z`), to the second.
+pub fn parse_rfc3339(value: &str) -> Option<tantivy::DateTime> {
+    OffsetDateTime::parse(value, &Rfc3339)
         .ok()
-        .map(|date| tantivy::DateTime::from_timestamp_secs(date.timestamp()))
+        .map(|date| tantivy::DateTime::from_timestamp_secs(date.unix_timestamp()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use tantivy::schema::{IndexRecordOption, NumericOptions, TextFieldIndexing, TextOptions};
+
+    fn schema() -> Schema {
+        let text = |tokenizer| {
+            TextOptions::default().set_indexing_options(
+                TextFieldIndexing::default()
+                    .set_tokenizer(tokenizer)
+                    .set_index_option(IndexRecordOption::WithFreqsAndPositions),
+            )
+        };
+        let mut builder = Schema::builder();
+        builder.add_text_field("title", text("default"));
+        builder.add_text_field("sku", text("raw"));
+        builder.add_u64_field("id", NumericOptions::default().set_indexed());
+        builder.build()
+    }
+
+    fn texts(terms: &[Term]) -> Vec<String> {
+        terms
+            .iter()
+            .map(|term| term.value().as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn text_values_are_analyzed_with_the_field_tokenizer() {
+        let (_, terms) = value_terms(&schema(), "title", "Hello World").unwrap();
+        assert_eq!(texts(&terms), ["hello", "world"]);
+
+        let (_, terms) = value_terms(&schema(), "sku", "AB-12").unwrap();
+        assert_eq!(texts(&terms), ["AB-12"]);
+    }
+
+    #[test]
+    fn other_values_are_parsed_for_the_field_type() {
+        let (_, terms) = value_terms(&schema(), "id", "42").unwrap();
+        assert_eq!(terms[0].value().as_u64(), Some(42));
+
+        assert!(value_terms(&schema(), "id", "forty-two").is_err());
+        assert!(value_terms(&schema(), "nope", "x").is_err());
+    }
+
+    #[test]
+    fn parses_booleans() {
+        assert_eq!(parse_bool("TRUE"), Some(true));
+        assert_eq!(parse_bool("no"), Some(false));
+        assert_eq!(parse_bool("maybe"), None);
+    }
+
+    #[test]
+    fn parses_timestamps_and_rfc3339_dates() {
+        let date = parse_date("2024-01-15T10:30:00Z").unwrap();
+        assert_eq!(date.into_timestamp_secs(), 1_705_314_600);
+        assert_eq!(parse_date("1705314600"), Some(date));
+        assert_eq!(parse_date("yesterday"), None);
+    }
 }

@@ -102,7 +102,7 @@ TantivyEx supports all Tantivy field types with comprehensive options:
 TantivyEx.Tokenizer.register_default_tokenizers()
 
 # A text analyzer: a base tokenizer, then filters
-{:ok, _} =
+:ok =
   TantivyEx.Tokenizer.register_text_analyzer(
     "english_full",
     # base tokenizer

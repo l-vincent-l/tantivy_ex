@@ -1,10 +1,10 @@
 use rustler::{Encoder, Env, NifResult, ResourceArc, Term};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use tantivy::{directory::MmapDirectory, Index};
+use tantivy::{Index, directory::MmapDirectory};
 
-use crate::modules::resources::{IndexResource, IndexWriterResource, SchemaResource};
-use crate::modules::tokenizer::global_tokenizer_manager;
+use crate::resources::{IndexResource, IndexWriterResource, SchemaResource, error};
+use crate::tokenizer::global_tokenizer_manager;
 
 /// Wraps `index` in its resource, with the registered tokenizers (see
 /// `TantivyEx.Tokenizer`), which its text fields can then use. Tantivy would
@@ -16,7 +16,6 @@ fn index_resource(mut index: Index) -> ResourceArc<IndexResource> {
     })
 }
 
-/// Index creation and management functions
 #[rustler::nif(schedule = "DirtyIo")]
 pub fn index_create_in_dir(
     path: String,
@@ -24,22 +23,13 @@ pub fn index_create_in_dir(
 ) -> NifResult<ResourceArc<IndexResource>> {
     let index_path = Path::new(&path);
 
-    // Create the directory if it doesn't exist
-    if !index_path.exists() {
-        if let Err(e) = std::fs::create_dir_all(index_path) {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Failed to create directory: {}",
-                e
-            ))));
-        }
-    }
+    // The directory is created if it does not exist
+    std::fs::create_dir_all(index_path)
+        .map_err(|e| error(format!("Failed to create directory: {}", e)))?;
 
     match Index::create_in_dir(index_path, schema_res.schema.clone()) {
         Ok(index) => Ok(index_resource(index)),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to create index: {}",
-            e
-        )))),
+        Err(e) => Err(error(format!("Failed to create index: {}", e))),
     }
 }
 
@@ -60,10 +50,7 @@ pub fn index_writer(
         Ok(writer) => Ok(ResourceArc::new(IndexWriterResource {
             writer: Arc::new(Mutex::new(writer)),
         })),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to create writer: {}",
-            e
-        )))),
+        Err(e) => Err(error(format!("Failed to create writer: {}", e))),
     }
 }
 
@@ -75,15 +62,12 @@ pub fn index_reader<'a>(
     match index_res.index.reader() {
         Ok(reader) => {
             let searcher = reader.searcher();
-            let searcher_res = ResourceArc::new(crate::modules::resources::SearcherResource {
+            let searcher_res = ResourceArc::new(crate::resources::SearcherResource {
                 searcher: Arc::new(searcher),
             });
             Ok(searcher_res.encode(env))
         }
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to create index reader: {}",
-            e
-        )))),
+        Err(e) => Err(error(format!("Failed to create index reader: {}", e))),
     }
 }
 
@@ -93,10 +77,7 @@ pub fn index_open_in_dir(path: String) -> NifResult<ResourceArc<IndexResource>> 
 
     match Index::open_in_dir(index_path) {
         Ok(index) => Ok(index_resource(index)),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to open index: {}",
-            e
-        )))),
+        Err(e) => Err(error(format!("Failed to open index: {}", e))),
     }
 }
 
@@ -107,28 +88,15 @@ pub fn index_open_or_create_in_dir(
 ) -> NifResult<ResourceArc<IndexResource>> {
     let index_path = Path::new(&path);
 
-    // Create the directory if it doesn't exist
-    if !index_path.exists() {
-        if let Err(e) = std::fs::create_dir_all(index_path) {
-            return Err(rustler::Error::Term(Box::new(format!(
-                "Failed to create directory: {}",
-                e
-            ))));
-        }
-    }
+    // The directory is created if it does not exist
+    std::fs::create_dir_all(index_path)
+        .map_err(|e| error(format!("Failed to create directory: {}", e)))?;
 
-    // Create MmapDirectory from path
     match MmapDirectory::open(index_path) {
         Ok(directory) => match Index::open_or_create(directory, schema_res.schema.clone()) {
             Ok(index) => Ok(index_resource(index)),
-            Err(e) => Err(rustler::Error::Term(Box::new(format!(
-                "Failed to open or create index: {}",
-                e
-            )))),
+            Err(e) => Err(error(format!("Failed to open or create index: {}", e))),
         },
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to open directory: {}",
-            e
-        )))),
+        Err(e) => Err(error(format!("Failed to open directory: {}", e))),
     }
 }

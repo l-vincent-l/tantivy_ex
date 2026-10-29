@@ -24,7 +24,7 @@ defmodule TantivyExTokenizerTest do
           nil
         )
 
-      assert is_binary(result) and String.contains?(result, "registered")
+      assert result == :ok
     end
 
     test "list_tokenizers/0 returns available tokenizers after registration" do
@@ -46,23 +46,21 @@ defmodule TantivyExTokenizerTest do
   describe "simple tokenizer registration" do
     test "register_simple_tokenizer/1 with valid name" do
       result = Native.register_simple_tokenizer("test_simple")
-      assert is_binary(result) and String.contains?(result, "registered")
+      assert result == :ok
 
       tokenizers = Native.list_tokenizers()
       assert "test_simple" in tokenizers
     end
 
-    test "register_simple_tokenizer/1 with empty name returns error" do
-      # The NIF currently allows empty names, so we'll test it succeeds
-      result = Native.register_simple_tokenizer("")
-      assert is_binary(result)
+    test "register_simple_tokenizer/1 accepts an empty name" do
+      assert :ok = Native.register_simple_tokenizer("")
     end
   end
 
   describe "whitespace tokenizer registration" do
     test "register_whitespace_tokenizer/1 with valid name" do
       result = Native.register_whitespace_tokenizer("test_whitespace")
-      assert is_binary(result) and String.contains?(result, "registered")
+      assert result == :ok
 
       tokenizers = Native.list_tokenizers()
       assert "test_whitespace" in tokenizers
@@ -73,7 +71,7 @@ defmodule TantivyExTokenizerTest do
     test "register_regex_tokenizer/2 with valid pattern" do
       pattern = "\\w+"
       result = Native.register_regex_tokenizer("test_regex", pattern)
-      assert is_binary(result) and String.contains?(result, "registered")
+      assert result == :ok
 
       tokenizers = Native.list_tokenizers()
       assert "test_regex" in tokenizers
@@ -88,7 +86,7 @@ defmodule TantivyExTokenizerTest do
   describe "ngram tokenizer registration" do
     test "register_ngram_tokenizer/4 with valid parameters" do
       result = Native.register_ngram_tokenizer("test_ngram", 2, 3, true)
-      assert is_binary(result) and String.contains?(result, "registered")
+      assert result == :ok
 
       tokenizers = Native.list_tokenizers()
       assert "test_ngram" in tokenizers
@@ -121,7 +119,7 @@ defmodule TantivyExTokenizerTest do
           40
         )
 
-      assert is_binary(result) and String.contains?(result, "registered")
+      assert result == :ok
 
       tokenizers = Native.list_tokenizers()
       assert "english_analyzer" in tokenizers
@@ -143,7 +141,7 @@ defmodule TantivyExTokenizerTest do
             40
           )
 
-        assert is_binary(result) and String.contains?(result, "registered")
+        assert result == :ok
 
         tokenizers = Native.list_tokenizers()
         assert name in tokenizers
@@ -296,7 +294,7 @@ defmodule TantivyExTokenizerTest do
             40
           )
 
-        assert is_binary(result) and String.contains?(result, "registered")
+        assert result == :ok
 
         # Verify it's in the tokenizer list
         tokenizers = Native.list_tokenizers()
@@ -316,7 +314,7 @@ defmodule TantivyExTokenizerTest do
           40
         )
 
-      assert is_binary(result1) and String.contains?(result1, "registered")
+      assert result1 == :ok
 
       # Test with whitespace base tokenizer
       result2 =
@@ -329,7 +327,7 @@ defmodule TantivyExTokenizerTest do
           40
         )
 
-      assert is_binary(result2) and String.contains?(result2, "registered")
+      assert result2 == :ok
 
       # Verify both are registered
       tokenizers = Native.list_tokenizers()
@@ -349,7 +347,7 @@ defmodule TantivyExTokenizerTest do
           nil
         )
 
-      assert is_binary(result1) and String.contains?(result1, "registered")
+      assert result1 == :ok
 
       # Only stop words
       result2 =
@@ -362,7 +360,7 @@ defmodule TantivyExTokenizerTest do
           nil
         )
 
-      assert is_binary(result2) and String.contains?(result2, "registered")
+      assert result2 == :ok
 
       # Only stemming
       result3 =
@@ -375,7 +373,7 @@ defmodule TantivyExTokenizerTest do
           nil
         )
 
-      assert is_binary(result3) and String.contains?(result3, "registered")
+      assert result3 == :ok
     end
   end
 
@@ -461,8 +459,7 @@ defmodule TantivyExTokenizerTest do
       languages = ["english", "french", "german", "spanish"]
 
       for language <- languages do
-        {:ok, message} = Tokenizer.register_stemming_tokenizer(language)
-        assert String.contains?(message, "registered")
+        assert :ok = Tokenizer.register_stemming_tokenizer(language)
 
         # Verify the tokenizer is available
         expected_name = "#{language}_stem"
@@ -507,8 +504,7 @@ defmodule TantivyExTokenizerTest do
       ]
 
       for test_case <- test_cases do
-        {:ok, message} = Tokenizer.register_language_analyzer(test_case.language)
-        assert String.contains?(message, "registered")
+        assert :ok = Tokenizer.register_language_analyzer(test_case.language)
 
         # Verify the tokenizer is available
         expected_name = "#{test_case.language}_text"

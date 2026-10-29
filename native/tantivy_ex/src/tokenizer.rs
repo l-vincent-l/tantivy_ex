@@ -1,22 +1,21 @@
-use lazy_static::lazy_static;
-use rustler::{NifResult, ResourceArc};
+use rustler::NifResult;
 use std::collections::HashSet;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
 use tantivy::tokenizer::{
     AsciiFoldingFilter, Language, LowerCaser, NgramTokenizer, RawTokenizer, RegexTokenizer,
     RemoveLongFilter, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer, TokenizerManager,
     WhitespaceTokenizer,
 };
 
-use crate::modules::resources::TokenizerManagerResource;
+use crate::resources::{atoms, error};
 
-// Global tokenizer manager singleton and registry tracking
-// The TokenizerManager is shared and locked internally: its clones see the
+// The registered tokenizers, given to every index, and their names. The
+// TokenizerManager is shared and locked internally: its clones see the
 // tokenizers registered later.
-lazy_static! {
-    static ref GLOBAL_TOKENIZER_MANAGER: TokenizerManager = TokenizerManager::default();
-    static ref TOKENIZER_REGISTRY: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
-}
+static GLOBAL_TOKENIZER_MANAGER: LazyLock<TokenizerManager> =
+    LazyLock::new(TokenizerManager::default);
+static TOKENIZER_REGISTRY: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 // A panic cannot leave the registry half-updated (a set of names, changed by
 // single inserts): it stays usable after one.
@@ -35,50 +34,31 @@ where
     registry().insert(name.to_string());
 }
 
-/// Create a new tokenizer manager
-#[rustler::nif]
-pub fn tokenizer_manager_new() -> ResourceArc<TokenizerManagerResource> {
-    let manager = TokenizerManager::default();
-    ResourceArc::new(TokenizerManagerResource { manager })
-}
-
 /// Register a simple tokenizer
 #[rustler::nif]
-pub fn register_simple_tokenizer(name: String) -> NifResult<String> {
+pub fn register_simple_tokenizer(name: String) -> NifResult<rustler::Atom> {
     let tokenizer = SimpleTokenizer::default();
     register_tokenizer_with_tracking(&name, tokenizer);
-    Ok(format!(
-        "Simple tokenizer '{}' registered successfully",
-        name
-    ))
+    Ok(atoms::ok())
 }
 
 /// Register a whitespace tokenizer
 #[rustler::nif]
-pub fn register_whitespace_tokenizer(name: String) -> NifResult<String> {
+pub fn register_whitespace_tokenizer(name: String) -> NifResult<rustler::Atom> {
     let tokenizer = WhitespaceTokenizer::default();
     register_tokenizer_with_tracking(&name, tokenizer);
-    Ok(format!(
-        "Whitespace tokenizer '{}' registered successfully",
-        name
-    ))
+    Ok(atoms::ok())
 }
 
 /// Register a regex tokenizer
 #[rustler::nif]
-pub fn register_regex_tokenizer(name: String, pattern: String) -> NifResult<String> {
+pub fn register_regex_tokenizer(name: String, pattern: String) -> NifResult<rustler::Atom> {
     match RegexTokenizer::new(&pattern) {
         Ok(tokenizer) => {
             register_tokenizer_with_tracking(&name, tokenizer);
-            Ok(format!(
-                "Regex tokenizer '{}' registered successfully",
-                name
-            ))
+            Ok(atoms::ok())
         }
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to create regex tokenizer: {}",
-            e
-        )))),
+        Err(e) => Err(error(format!("Failed to create regex tokenizer: {}", e))),
     }
 }
 
@@ -89,19 +69,13 @@ pub fn register_ngram_tokenizer(
     min_gram: usize,
     max_gram: usize,
     prefix_only: bool,
-) -> NifResult<String> {
+) -> NifResult<rustler::Atom> {
     match NgramTokenizer::new(min_gram, max_gram, prefix_only) {
         Ok(tokenizer) => {
             register_tokenizer_with_tracking(&name, tokenizer);
-            Ok(format!(
-                "N-gram tokenizer '{}' registered successfully",
-                name
-            ))
+            Ok(atoms::ok())
         }
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Failed to create N-gram tokenizer: {}",
-            e
-        )))),
+        Err(e) => Err(error(format!("Failed to create N-gram tokenizer: {}", e))),
     }
 }
 
@@ -114,7 +88,7 @@ pub fn register_text_analyzer(
     stop_words_language: Option<String>,
     stemming_language: Option<String>,
     remove_long_threshold: Option<usize>,
-) -> NifResult<String> {
+) -> NifResult<rustler::Atom> {
     build_and_register_text_analyzer(
         name,
         base_tokenizer,
@@ -136,7 +110,7 @@ pub fn register_text_analyzer_with_folding(
     stemming_language: Option<String>,
     remove_long_threshold: Option<usize>,
     ascii_folding: bool,
-) -> NifResult<String> {
+) -> NifResult<rustler::Atom> {
     build_and_register_text_analyzer(
         name,
         base_tokenizer,
@@ -158,24 +132,19 @@ fn build_and_register_text_analyzer(
     stemming_language: Option<String>,
     remove_long_threshold: Option<usize>,
     ascii_folding: bool,
-) -> NifResult<String> {
+) -> NifResult<rustler::Atom> {
     let stop_words = match stop_words_language.as_deref() {
         Some(lang) => Some(
             parse_language(lang)
                 .and_then(StopWordFilter::new)
-                .ok_or_else(|| {
-                    rustler::Error::Term(Box::new(format!(
-                        "Unsupported stop words language: {}",
-                        lang
-                    )))
-                })?,
+                .ok_or_else(|| error(format!("Unsupported stop words language: {}", lang)))?,
         ),
         None => None,
     };
 
     let stemmer = match stemming_language.as_deref() {
         Some(lang) => Some(Stemmer::new(parse_language(lang).ok_or_else(|| {
-            rustler::Error::Term(Box::new(format!("Unsupported stemming language: {}", lang)))
+            error(format!("Unsupported stemming language: {}", lang))
         })?)),
         None => None,
     };
@@ -184,10 +153,10 @@ fn build_and_register_text_analyzer(
         "simple" => TextAnalyzer::builder(SimpleTokenizer::default()).dynamic(),
         "whitespace" => TextAnalyzer::builder(WhitespaceTokenizer::default()).dynamic(),
         _ => {
-            return Err(rustler::Error::Term(Box::new(format!(
+            return Err(error(format!(
                 "Unsupported base tokenizer: {}. Use 'simple' or 'whitespace'",
                 base_tokenizer
-            ))))
+            )));
         }
     };
 
@@ -208,7 +177,7 @@ fn build_and_register_text_analyzer(
     }
 
     register_tokenizer_with_tracking(&name, builder.build());
-    Ok(format!("Text analyzer '{}' registered successfully", name))
+    Ok(atoms::ok())
 }
 
 /// The tokenizer manager holding the registered tokenizers, given to the
@@ -238,10 +207,10 @@ pub fn tokenize_text(tokenizer_name: String, text: String) -> NifResult<Vec<Stri
 
             Ok(tokens)
         }
-        None => Err(rustler::Error::Term(Box::new(format!(
+        None => Err(error(format!(
             "Tokenizer '{}' not found. Register it first.",
             tokenizer_name
-        )))),
+        ))),
     }
 }
 
@@ -262,16 +231,16 @@ pub fn tokenize_text_detailed(
 
             Ok(tokens)
         }
-        None => Err(rustler::Error::Term(Box::new(format!(
+        None => Err(error(format!(
             "Tokenizer '{}' not found. Register it first.",
             tokenizer_name
-        )))),
+        ))),
     }
 }
 
 /// Register common tokenizers with sensible defaults
 #[rustler::nif(schedule = "DirtyCpu")]
-pub fn register_default_tokenizers() -> NifResult<String> {
+pub fn register_default_tokenizers() -> NifResult<rustler::Atom> {
     // Register basic tokenizers. "default" and "raw" are Tantivy's own: the
     // indexes get these tokenizers (see global_tokenizer_manager), so they must
     // not change how the fields using them are indexed.
@@ -287,7 +256,6 @@ pub fn register_default_tokenizers() -> NifResult<String> {
     register_tokenizer_with_tracking("whitespace", WhitespaceTokenizer::default());
     register_tokenizer_with_tracking("raw", RawTokenizer::default());
 
-    // Register language-specific stemming tokenizers
     let languages = ["en", "fr", "de", "es", "it", "pt", "ru"];
     for lang in &languages {
         if let Some(language) = parse_language(lang) {
@@ -300,17 +268,16 @@ pub fn register_default_tokenizers() -> NifResult<String> {
         }
     }
 
-    // Register common text analyzers
-    if let Some(en_lang) = parse_language("en") {
+    if let Some(stop_words) = parse_language("en").and_then(StopWordFilter::new) {
         let en_analyzer = TextAnalyzer::builder(SimpleTokenizer::default())
             .filter(LowerCaser)
-            .filter(StopWordFilter::new(en_lang).unwrap())
-            .filter(Stemmer::new(en_lang))
+            .filter(stop_words)
+            .filter(Stemmer::new(Language::English))
             .build();
         register_tokenizer_with_tracking("en_text", en_analyzer);
     }
 
-    Ok("Default tokenizers registered successfully".to_string())
+    Ok(atoms::ok())
 }
 
 // Helper function to parse language strings

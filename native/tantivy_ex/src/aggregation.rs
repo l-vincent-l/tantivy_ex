@@ -1,12 +1,12 @@
 use rustler::{Encoder, Env, NifResult, ResourceArc, Term};
-use tantivy::aggregation::agg_req::{get_fast_field_names, Aggregations};
+use tantivy::Searcher;
+use tantivy::aggregation::agg_req::{Aggregations, get_fast_field_names};
 use tantivy::aggregation::agg_result::AggregationResults;
 use tantivy::aggregation::{AggContextParams, AggregationCollector, AggregationLimitsGuard};
 use tantivy::collector::{MultiCollector, TopDocs};
-use tantivy::Searcher;
 
-use crate::modules::resources::{error, json_to_term, QueryResource, SearcherResource};
-use crate::modules::search::encode_hits;
+use crate::resources::{QueryResource, SearcherResource, error, json_to_term};
+use crate::search::encode_hits;
 
 // The aggregations are Tantivy's, in their Elasticsearch-compatible JSON:
 // requests are deserialized as `Aggregations`, and results serialized from

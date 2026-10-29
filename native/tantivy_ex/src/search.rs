@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use rustler::{Encoder, Env, NifResult, ResourceArc, Term};
 use tantivy::collector::TopDocs;
 use tantivy::query::{Query, QueryParser};
@@ -6,9 +6,7 @@ use tantivy::schema::{Facet, FieldType, Value};
 use tantivy::snippet::SnippetGenerator;
 use tantivy::{DocAddress, Score, Searcher, TantivyDocument};
 
-use crate::modules::resources::{QueryResource, SearcherResource};
-
-// Search and retrieval functions
+use crate::resources::{QueryResource, SearcherResource, error, schema_field};
 
 /// Searches with a query string, parsed with the index's tokenizers. The
 /// default fields are the fields searched by terms without a field; when
@@ -37,16 +35,16 @@ pub fn searcher_search<'a>(
         default_fields
             .iter()
             .map(|name| {
-                schema.get_field(name).map_err(|_| {
-                    rustler::Error::Term(Box::new(format!("Field not found: {}", name)))
-                })
+                schema
+                    .get_field(name)
+                    .map_err(|_| error(format!("Field not found: {}", name)))
             })
             .collect::<NifResult<Vec<_>>>()?
     };
 
     let query = QueryParser::for_index(searcher.index(), fields)
         .parse_query(&query_str)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Failed to parse query: {}", e))))?;
+        .map_err(|e| error(format!("Failed to parse query: {}", e)))?;
 
     search_results(env, searcher, &*query, limit, include_docs)
 }
@@ -81,7 +79,7 @@ fn search_results<'a>(
     let top_docs = TopDocs::with_limit(limit).order_by_score();
     let docs = searcher
         .search(query, &top_docs)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Search failed: {}", e))))?;
+        .map_err(|e| error(format!("Search failed: {}", e)))?;
 
     encode_hits(env, searcher, docs, include_docs)
 }
@@ -195,19 +193,10 @@ pub fn searcher_snippet(
     text: String,
     max_num_chars: usize,
 ) -> NifResult<(String, Vec<(usize, usize)>)> {
-    let field = searcher_res
-        .searcher
-        .schema()
-        .get_field(&field_name)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Field not found: {}", e))))?;
+    let field = schema_field(searcher_res.searcher.schema(), &field_name)?;
 
     let mut generator = SnippetGenerator::create(&searcher_res.searcher, &*query_res.query, field)
-        .map_err(|e| {
-            rustler::Error::Term(Box::new(format!(
-                "Failed to create snippet generator: {}",
-                e
-            )))
-        })?;
+        .map_err(|e| error(format!("Failed to create snippet generator: {}", e)))?;
     generator.set_max_num_chars(max_num_chars);
 
     let snippet = generator.snippet(&text);

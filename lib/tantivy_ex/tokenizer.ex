@@ -13,7 +13,7 @@ defmodule TantivyEx.Tokenizer do
   ## Basic Usage
 
       iex> TantivyEx.Tokenizer.register_default_tokenizers()
-      "Default tokenizers registered successfully"
+      :ok
 
       iex> TantivyEx.Tokenizer.tokenize_text("simple", "Hello World!")
       ["hello", "world"]
@@ -22,7 +22,7 @@ defmodule TantivyEx.Tokenizer do
 
       # Register a custom regex tokenizer
       iex> TantivyEx.Tokenizer.register_regex_tokenizer("email", "\\\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\\\.[A-Z|a-z]{2,}\\\\b")
-      "Regex tokenizer 'email' registered successfully"
+      :ok
 
       # Register a text analyzer with multiple filters
       iex> TantivyEx.Tokenizer.register_text_analyzer(
@@ -33,7 +33,7 @@ defmodule TantivyEx.Tokenizer do
       ...>   "en",  # stemming
       ...>   40     # remove long tokens threshold
       ...> )
-      {:ok, "Text analyzer 'en_full' registered successfully"}
+      :ok
 
   ## Supported Languages
 
@@ -64,7 +64,7 @@ defmodule TantivyEx.Tokenizer do
   alias TantivyEx.Native
 
   @type tokenizer_name :: String.t()
-  @type tokenizer_result :: {:ok, String.t()} | {:error, String.t()}
+  @type tokenizer_result :: :ok | {:error, String.t()}
   @type tokens :: [String.t()]
   @type detailed_tokens :: [{String.t(), non_neg_integer(), non_neg_integer()}]
 
@@ -79,13 +79,12 @@ defmodule TantivyEx.Tokenizer do
   ## Examples
 
       iex> TantivyEx.Tokenizer.register_default_tokenizers()
-      "Default tokenizers registered successfully"
+      :ok
   """
-  @spec register_default_tokenizers() :: String.t()
+  @spec register_default_tokenizers() :: :ok
   def register_default_tokenizers do
     case Native.register_default_tokenizers() do
-      {:ok, result} -> result
-      result when is_binary(result) -> result
+      :ok -> :ok
       {:error, reason} -> raise "Failed to register default tokenizers: #{reason}"
     end
   end
@@ -102,13 +101,12 @@ defmodule TantivyEx.Tokenizer do
   ## Examples
 
       iex> TantivyEx.Tokenizer.register_simple_tokenizer("my_simple")
-      "Simple tokenizer 'my_simple' registered successfully"
+      :ok
   """
   @spec register_simple_tokenizer(tokenizer_name()) :: tokenizer_result()
   def register_simple_tokenizer(name) when is_binary(name) do
     case Native.register_simple_tokenizer(name) do
-      {:ok, result} -> {:ok, result}
-      result when is_binary(result) -> {:ok, result}
+      :ok -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
@@ -125,13 +123,12 @@ defmodule TantivyEx.Tokenizer do
   ## Examples
 
       iex> TantivyEx.Tokenizer.register_whitespace_tokenizer("whitespace_only")
-      "Whitespace tokenizer 'whitespace_only' registered successfully"
+      :ok
   """
   @spec register_whitespace_tokenizer(tokenizer_name()) :: tokenizer_result()
   def register_whitespace_tokenizer(name) when is_binary(name) do
     case Native.register_whitespace_tokenizer(name) do
-      {:ok, result} -> {:ok, result}
-      result when is_binary(result) -> {:ok, result}
+      :ok -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
@@ -150,17 +147,16 @@ defmodule TantivyEx.Tokenizer do
 
       # Split on any non-alphanumeric character
       iex> TantivyEx.Tokenizer.register_regex_tokenizer("alphanum", "[^a-zA-Z0-9]+")
-      "Regex tokenizer 'alphanum' registered successfully"
+      :ok
 
       # Extract email addresses
       iex> TantivyEx.Tokenizer.register_regex_tokenizer("email", "\\\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\\\.[A-Z|a-z]{2,}\\\\b")
-      "Regex tokenizer 'email' registered successfully"
+      :ok
   """
   @spec register_regex_tokenizer(tokenizer_name(), String.t()) :: tokenizer_result()
   def register_regex_tokenizer(name, pattern) when is_binary(name) and is_binary(pattern) do
     case Native.register_regex_tokenizer(name, pattern) do
-      {:ok, result} -> {:ok, result}
-      result when is_binary(result) -> {:ok, result}
+      :ok -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
@@ -181,11 +177,11 @@ defmodule TantivyEx.Tokenizer do
 
       # Character bigrams and trigrams
       iex> TantivyEx.Tokenizer.register_ngram_tokenizer("char_2_3", 2, 3, false)
-      "N-gram tokenizer 'char_2_3' registered successfully"
+      :ok
 
       # Prefix-only trigrams
       iex> TantivyEx.Tokenizer.register_ngram_tokenizer("prefix_3", 3, 3, true)
-      "N-gram tokenizer 'prefix_3' registered successfully"
+      :ok
   """
   @spec register_ngram_tokenizer(tokenizer_name(), pos_integer(), pos_integer(), boolean()) ::
           tokenizer_result()
@@ -193,8 +189,7 @@ defmodule TantivyEx.Tokenizer do
       when is_binary(name) and is_integer(min_gram) and is_integer(max_gram) and
              is_boolean(prefix_only) do
     case Native.register_ngram_tokenizer(name, min_gram, max_gram, prefix_only) do
-      {:ok, result} -> {:ok, result}
-      result when is_binary(result) -> {:ok, result}
+      :ok -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
@@ -232,7 +227,7 @@ defmodule TantivyEx.Tokenizer do
       ...>   "en",
       ...>   40
       ...> )
-      {:ok, "Text analyzer 'en_full' registered successfully"}
+      :ok
 
       # Custom threshold of 50 characters
       iex> TantivyEx.Tokenizer.register_text_analyzer(
@@ -243,7 +238,7 @@ defmodule TantivyEx.Tokenizer do
       ...>   "en",
       ...>   50
       ...> )
-      {:ok, "Text analyzer 'custom_threshold' registered successfully"}
+      :ok
 
       # Disable long word filtering entirely
       iex> TantivyEx.Tokenizer.register_text_analyzer(
@@ -254,7 +249,7 @@ defmodule TantivyEx.Tokenizer do
       ...>   "en",
       ...>   nil
       ...> )
-      {:ok, "Text analyzer 'no_long_filter' registered successfully"}
+      :ok
 
       # French analyzer with stop words only
       iex> TantivyEx.Tokenizer.register_text_analyzer(
@@ -265,7 +260,7 @@ defmodule TantivyEx.Tokenizer do
       ...>   nil,
       ...>   nil
       ...> )
-      {:ok, "Text analyzer 'fr_stop' registered successfully"}
+      :ok
 
       # French analyzer with stemming, ignoring accents
       iex> TantivyEx.Tokenizer.register_text_analyzer(
@@ -277,7 +272,7 @@ defmodule TantivyEx.Tokenizer do
       ...>   40,
       ...>   true
       ...> )
-      {:ok, "Text analyzer 'fr_folded' registered successfully"}
+      :ok
   """
   @spec register_text_analyzer(
           tokenizer_name(),
@@ -309,8 +304,7 @@ defmodule TantivyEx.Tokenizer do
            remove_long_threshold,
            ascii_folding
          ) do
-      {:ok, result} -> {:ok, result}
-      result when is_binary(result) -> {:ok, result}
+      :ok -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
@@ -401,13 +395,13 @@ defmodule TantivyEx.Tokenizer do
   ## Examples
 
       iex> TantivyEx.Tokenizer.register_stemming_tokenizer("en")
-      "Text analyzer 'en_stem' registered successfully"
+      :ok
 
       iex> TantivyEx.Tokenizer.register_stemming_tokenizer("fr")
-      "Text analyzer 'fr_stem' registered successfully"
+      :ok
 
       iex> TantivyEx.Tokenizer.register_stemming_tokenizer("en", 50)
-      "Text analyzer 'en_stem' registered successfully"
+      :ok
   """
   @spec register_stemming_tokenizer(String.t()) :: tokenizer_result()
   @spec register_stemming_tokenizer(String.t(), pos_integer() | nil) :: tokenizer_result()
@@ -431,13 +425,13 @@ defmodule TantivyEx.Tokenizer do
   ## Examples
 
       iex> TantivyEx.Tokenizer.register_language_analyzer("en")
-      "Text analyzer 'en_text' registered successfully"
+      :ok
 
       iex> TantivyEx.Tokenizer.register_language_analyzer("de")
-      "Text analyzer 'de_text' registered successfully"
+      :ok
 
       iex> TantivyEx.Tokenizer.register_language_analyzer("en", 60)
-      "Text analyzer 'en_text' registered successfully"
+      :ok
   """
   @spec register_language_analyzer(String.t()) :: tokenizer_result()
   @spec register_language_analyzer(String.t(), pos_integer() | nil) :: tokenizer_result()

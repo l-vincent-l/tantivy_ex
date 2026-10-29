@@ -3,8 +3,7 @@ use std::collections::BTreeMap;
 use std::panic::RefUnwindSafe;
 use std::sync::{Arc, Mutex, MutexGuard};
 use tantivy::schema::{OwnedValue, Schema};
-use tantivy::tokenizer::TokenizerManager;
-use tantivy::{query::QueryParser, Index, IndexWriter};
+use tantivy::{Index, IndexWriter, query::QueryParser};
 
 // Resource types for managing state
 pub struct IndexResource {
@@ -39,9 +38,7 @@ impl IndexWriterResource {
     /// state: it is then an error to use it, instead of a panic in every call.
     pub fn lock(&self) -> rustler::NifResult<MutexGuard<'_, IndexWriter>> {
         self.writer.lock().map_err(|_| {
-            rustler::Error::Term(Box::new(
-                "The index writer is unusable: an operation panicked while using it".to_string(),
-            ))
+            error("The index writer is unusable: an operation panicked while using it".to_string())
         })
     }
 }
@@ -71,13 +68,6 @@ pub struct QueryParserResource {
 
 #[rustler::resource_impl]
 impl rustler::Resource for QueryParserResource {}
-
-pub struct TokenizerManagerResource {
-    pub manager: TokenizerManager,
-}
-
-#[rustler::resource_impl]
-impl rustler::Resource for TokenizerManagerResource {}
 
 // Helper function to convert serde_json::Value to BTreeMap<String, OwnedValue>
 pub fn convert_json_value_to_btreemap(value: serde_json::Value) -> BTreeMap<String, OwnedValue> {
@@ -143,4 +133,14 @@ pub fn json_to_term<'a>(env: Env<'a>, value: &serde_json::Value) -> Term<'a> {
 /// An error returned to Elixir as `{:error, message}`.
 pub fn error<S: Into<String>>(message: S) -> rustler::Error {
     rustler::Error::Term(Box::new(message.into()))
+}
+
+/// The field named `field_name` in the schema.
+pub fn schema_field(
+    schema: &Schema,
+    field_name: &str,
+) -> rustler::NifResult<tantivy::schema::Field> {
+    schema
+        .get_field(field_name)
+        .map_err(|_| error(format!("Field '{}' not found in schema", field_name)))
 }
