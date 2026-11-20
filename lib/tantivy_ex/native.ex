@@ -1,7 +1,29 @@
 defmodule TantivyEx.Native do
   @moduledoc false
 
-  use Rustler, otp_app: :tantivy_ex, crate: "tantivy_ex"
+  version = Mix.Project.config()[:version]
+  checksum_file = Path.expand("../../checksum-Elixir.TantivyEx.Native.exs", __DIR__)
+
+  # The NIF is built from source with TANTIVY_EX_BUILD=1, and for the commits
+  # with no checksum file (before the precompiled NIFs of a version are published).
+  use RustlerPrecompiled,
+    otp_app: :tantivy_ex,
+    crate: "tantivy_ex",
+    version: version,
+    base_url: "https://github.com/l-vincent-l/tantivy_ex/releases/download/v#{version}",
+    targets: ~w(
+      aarch64-apple-darwin
+      x86_64-apple-darwin
+      aarch64-unknown-linux-gnu
+      arm-unknown-linux-gnueabihf
+      riscv64gc-unknown-linux-gnu
+      x86_64-unknown-linux-gnu
+      x86_64-pc-windows-gnu
+      x86_64-pc-windows-msvc
+    ),
+    nif_versions: ["2.15"],
+    force_build:
+      System.get_env("TANTIVY_EX_BUILD") in ["1", "true"] or not File.exists?(checksum_file)
 
   # Schema functions
   def schema_builder_new(), do: :erlang.nif_error(:nif_not_loaded)
