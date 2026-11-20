@@ -1,6 +1,5 @@
 defmodule TantivyExTokenizerTest do
   use ExUnit.Case, async: true
-  require Logger
 
   alias TantivyEx.{Native, Schema, Index, IndexWriter}
 

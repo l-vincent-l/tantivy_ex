@@ -612,8 +612,11 @@ defmodule TantivyEx.SearchResultsTest do
     end
 
     test "raises on results that are not a list" do
+      # Built at runtime: the type checker rejects a literal of the wrong type
+      results = Enum.random(["not_a_list"])
+
       assert_raise FunctionClauseError, fn ->
-        SearchResults.aggregate("not_a_list", ["field"])
+        SearchResults.aggregate(results, ["field"])
       end
     end
   end
