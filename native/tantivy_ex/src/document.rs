@@ -6,8 +6,8 @@ use tantivy::query::PhraseQuery;
 use tantivy::schema::{Field, FieldType, Schema};
 
 use crate::resources::{
-    IndexWriterResource, QueryResource, SchemaResource, atoms, convert_ip_to_ipv6,
-    convert_json_value_to_btreemap, error,
+    IndexWriterResource, QueryResource, atoms, convert_ip_to_ipv6, convert_json_value_to_btreemap,
+    error,
 };
 use crate::terms::{parse_rfc3339, value_terms};
 
@@ -121,21 +121,6 @@ pub fn writer_delete_term(
                 .map_err(|e| error(format!("Failed to delete by query: {}", e)))?;
             Ok(atoms::ok())
         }
-    }
-}
-
-#[rustler::nif(schedule = "DirtyIo")]
-pub fn writer_add_document_with_schema(
-    writer_res: ResourceArc<IndexWriterResource>,
-    document: rustler::Term,
-    schema_res: ResourceArc<SchemaResource>,
-) -> NifResult<rustler::Atom> {
-    let tantivy_doc = build_document(&schema_res.schema, document).map_err(error)?;
-    let writer = writer_res.lock()?;
-
-    match writer.add_document(tantivy_doc) {
-        Ok(_) => Ok(atoms::ok()),
-        Err(e) => Err(error(format!("Failed to add document: {}", e))),
     }
 }
 

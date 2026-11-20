@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`TantivyEx.Document` returns `:ok`** - `add/3`, `update/5` and `delete/4` return `:ok`, as `IndexWriter` does, instead of `{:ok, :document_added}`, `{:ok, :updated}` and `{:ok, :deleted}`.
+- **`Document.add_batch/4`** - Adds the documents only if all of them are valid, and returns `{:ok, added}`; with `continue_on_error: true`, it adds the valid ones and returns `{:ok, added, errors}`, the errors giving the position of each invalid document. The `:batch_size` and `:validate` options, which changed nothing, are removed: an unknown option raises.
+- **`Document.prepare_json/3`** returns the document, a map, instead of its JSON encoding.
+
+### Fixed
+
+- **`Document.update/5` deleted by `"id"`** when the new document had one, whatever field it was given: an update by another field left the old document in the index.
+- **`Document.add_batch/4`** added the other documents when one was invalid without `continue_on_error`, and with it, gave the wrong positions and dropped the errors of the invalid documents.
+- **`Document.validate/2`** accepted unknown fields, which `add/3` then rejected, and joined the values of a multi-valued text field into one string.
+
 ## [0.6.0] - 2026-11-20
 
 ### Added

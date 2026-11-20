@@ -31,7 +31,7 @@ defmodule TantivyExDocumentOperationsTest do
       "created_at" => "2023-01-01T00:00:00Z"
     }
 
-    assert {:ok, _} = Document.add(writer, doc, schema)
+    assert :ok = Document.add(writer, doc, schema)
     assert :ok = IndexWriter.commit(writer)
 
     # Verify document exists
@@ -41,7 +41,7 @@ defmodule TantivyExDocumentOperationsTest do
     assert length(before_results) == 1
 
     # Delete the document
-    assert {:ok, :deleted} = Document.delete(writer, "id", "300", schema)
+    assert :ok = Document.delete(writer, "id", "300", schema)
     assert :ok = IndexWriter.commit(writer)
 
     # Refresh searcher to see changes
@@ -83,7 +83,7 @@ defmodule TantivyExDocumentOperationsTest do
     assert length(all_results) == 2
 
     # Delete published document (published=true)
-    assert {:ok, :deleted} = Document.delete(writer, "published", "true", schema)
+    assert :ok = Document.delete(writer, "published", "true", schema)
     assert :ok = IndexWriter.commit(writer)
 
     # Verify only unpublished document remains
@@ -106,7 +106,7 @@ defmodule TantivyExDocumentOperationsTest do
       "created_at" => "2023-01-01T00:00:00Z"
     }
 
-    assert {:ok, _} = Document.add(writer, original_doc, schema)
+    assert :ok = Document.add(writer, original_doc, schema)
     assert :ok = IndexWriter.commit(writer)
 
     # Update the document
@@ -120,7 +120,7 @@ defmodule TantivyExDocumentOperationsTest do
       "created_at" => "2023-02-01T00:00:00Z"
     }
 
-    assert {:ok, :updated} = Document.update(writer, "id", "100", updated_doc, schema)
+    assert :ok = Document.update(writer, "id", "100", updated_doc, schema)
     assert :ok = IndexWriter.commit(writer)
 
     # Verify the update by searching

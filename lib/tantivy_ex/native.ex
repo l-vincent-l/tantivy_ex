@@ -88,10 +88,6 @@ defmodule TantivyEx.Native do
   def writer_delete_term(_writer, _term_field, _term_value),
     do: :erlang.nif_error(:nif_not_loaded)
 
-  # Enhanced document operations
-  def writer_add_document_with_schema(_writer, _document, _schema),
-    do: :erlang.nif_error(:nif_not_loaded)
-
   # Search functions
   def index_reader(_index), do: :erlang.nif_error(:nif_not_loaded)
 

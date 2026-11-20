@@ -169,8 +169,8 @@ updated = %{
   "category" => "/programming/rust"
 }
 
-{:ok, :updated} = Document.update(writer, "id", 3, updated, schema)
-{:ok, :deleted} = Document.delete(writer, "id", 1, schema)
+:ok = Document.update(writer, "id", 3, updated, schema)
+:ok = Document.delete(writer, "id", 1, schema)
 :ok = IndexWriter.commit(writer)
 
 # A searcher sees the index as it was when created: take a new one

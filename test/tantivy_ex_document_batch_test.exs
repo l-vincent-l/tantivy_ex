@@ -46,8 +46,7 @@ defmodule TantivyExDocumentBatchTest do
     ]
 
     # Add documents
-    {:ok, results} = Document.add_batch(writer, docs, schema)
-    assert length(results) == 2
+    {:ok, 2} = Document.add_batch(writer, docs, schema)
 
     # Commit changes
     :ok = IndexWriter.commit(writer)

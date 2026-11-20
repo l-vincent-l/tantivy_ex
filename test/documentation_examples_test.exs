@@ -210,7 +210,7 @@ defmodule DocumentationExamplesTest do
       }
 
       # This should work according to the documentation
-      assert {:ok, _result} = Document.add(writer, document, schema)
+      assert :ok = Document.add(writer, document, schema)
       assert :ok = IndexWriter.commit(writer)
     end
 
@@ -224,7 +224,7 @@ defmodule DocumentationExamplesTest do
         "tags" => "/blog/tutorials/elixir"
       }
 
-      assert {:ok, _result} = Document.add(writer, blog_post, schema)
+      assert :ok = Document.add(writer, blog_post, schema)
     end
 
     test "batch document processing from docs", %{writer: writer, schema: schema} do
@@ -247,8 +247,7 @@ defmodule DocumentationExamplesTest do
         }
       ]
 
-      options = %{batch_size: 10, validate: true}
-      assert {:ok, _result} = Document.add_batch(writer, documents, schema, options)
+      assert {:ok, _added} = Document.add_batch(writer, documents, schema)
     end
 
     test "document validation from docs", %{schema: schema} do
@@ -295,7 +294,7 @@ defmodule DocumentationExamplesTest do
       ]
 
       Enum.each(docs, fn doc ->
-        {:ok, _} = Document.add(writer, doc, schema)
+        :ok = Document.add(writer, doc, schema)
       end)
 
       :ok = IndexWriter.commit(writer)
@@ -349,7 +348,7 @@ defmodule DocumentationExamplesTest do
         "published_at" => "2024-01-15T10:30:00Z"
       }
 
-      assert {:ok, _} = Document.add(writer, doc, schema)
+      assert :ok = Document.add(writer, doc, schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Search
@@ -393,7 +392,7 @@ defmodule DocumentationExamplesTest do
         "metadata" => %{"category" => "test", "priority" => 1}
       }
 
-      assert {:ok, _} = Document.add(writer, doc, schema)
+      assert :ok = Document.add(writer, doc, schema)
       assert :ok = IndexWriter.commit(writer)
     end
   end
@@ -441,7 +440,7 @@ defmodule DocumentationExamplesTest do
         "title" => "Bluetooth Headphones"
       }
 
-      assert {:ok, _} = Document.add(writer, doc, schema)
+      assert :ok = Document.add(writer, doc, schema)
       assert :ok = IndexWriter.commit(writer)
     end
 
@@ -471,7 +470,7 @@ defmodule DocumentationExamplesTest do
         "product_id" => 12345
       }
 
-      assert {:ok, _} = Document.add(writer, product, schema)
+      assert :ok = Document.add(writer, product, schema)
       assert :ok = IndexWriter.commit(writer)
     end
 
@@ -499,7 +498,7 @@ defmodule DocumentationExamplesTest do
         "author_id" => 1001
       }
 
-      assert {:ok, _} = Document.add(writer, blog_post, schema)
+      assert :ok = Document.add(writer, blog_post, schema)
       assert :ok = IndexWriter.commit(writer)
     end
 
@@ -527,7 +526,7 @@ defmodule DocumentationExamplesTest do
         "metadata" => %{"user_id" => 12345, "session_id" => "abc123"}
       }
 
-      assert {:ok, _} = Document.add(writer, log_entry, schema)
+      assert :ok = Document.add(writer, log_entry, schema)
       assert :ok = IndexWriter.commit(writer)
     end
   end
@@ -580,7 +579,7 @@ defmodule DocumentationExamplesTest do
       ]
 
       Enum.each(docs, fn doc ->
-        {:ok, _} = Document.add(writer, doc, schema)
+        :ok = Document.add(writer, doc, schema)
       end)
 
       :ok = IndexWriter.commit(writer)
@@ -693,7 +692,7 @@ defmodule DocumentationExamplesTest do
         "title_fr" => "Bonjour le Monde"
       }
 
-      assert {:ok, _} = Document.add(writer, multilang_doc, schema)
+      assert :ok = Document.add(writer, multilang_doc, schema)
       assert :ok = IndexWriter.commit(writer)
     end
   end
@@ -804,7 +803,7 @@ defmodule DocumentationExamplesTest do
       ]
 
       Enum.each(docs, fn doc ->
-        {:ok, _} = Document.add(writer, doc, schema)
+        :ok = Document.add(writer, doc, schema)
       end)
 
       :ok = IndexWriter.commit(writer)

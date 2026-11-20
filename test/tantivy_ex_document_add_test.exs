@@ -20,7 +20,7 @@ defmodule TantivyExDocumentAddTest do
     }
 
     # Add the document and commit
-    assert {:ok, _} = Document.add(writer, doc, schema)
+    assert :ok = Document.add(writer, doc, schema)
     assert :ok = IndexWriter.commit(writer)
 
     # Search for the document
@@ -108,18 +108,18 @@ defmodule TantivyExDocumentAddTest do
 
     test "analyzes the value with the field's tokenizer", ctx do
       # A raw field keeps the capitals
-      assert {:ok, :deleted} = Document.delete(ctx.writer, "sku", "AB-12", ctx.schema)
+      assert :ok = Document.delete(ctx.writer, "sku", "AB-12", ctx.schema)
       :ok = IndexWriter.commit(ctx.writer)
       assert skus(ctx.index) == ["CD-34"]
 
       # A stemmed field matches the inflected words
-      assert {:ok, :deleted} = Document.delete(ctx.writer, "body", "cat", ctx.schema)
+      assert :ok = Document.delete(ctx.writer, "body", "cat", ctx.schema)
       :ok = IndexWriter.commit(ctx.writer)
       assert skus(ctx.index) == []
     end
 
     test "parses dates as the documents do", ctx do
-      assert {:ok, :deleted} =
+      assert :ok =
                Document.delete(ctx.writer, "at", "2024-01-15T10:30:00Z", ctx.schema)
 
       :ok = IndexWriter.commit(ctx.writer)
@@ -128,7 +128,7 @@ defmodule TantivyExDocumentAddTest do
 
     test "update replaces the document, without a duplicate", ctx do
       updated = %{"sku" => "AB-12", "body" => "sleeping dogs", "at" => 0}
-      assert {:ok, :updated} = Document.update(ctx.writer, "sku", "AB-12", updated, ctx.schema)
+      assert :ok = Document.update(ctx.writer, "sku", "AB-12", updated, ctx.schema)
       :ok = IndexWriter.commit(ctx.writer)
       assert skus(ctx.index) == ["AB-12", "CD-34"]
     end
@@ -137,5 +137,24 @@ defmodule TantivyExDocumentAddTest do
       assert {:error, reason} = Document.delete(ctx.writer, "body", "  ", ctx.schema)
       assert reason =~ "has no terms"
     end
+  end
+
+  test "update deletes by its field, not by the new document's id" do
+    schema =
+      Schema.new()
+      |> Schema.add_u64_field("id", :indexed_stored)
+      |> Schema.add_text_field_with_tokenizer("sku", :text_stored, "raw")
+
+    {:ok, index} = Index.create_in_ram(schema)
+    {:ok, writer} = IndexWriter.new(index)
+    :ok = IndexWriter.add_document(writer, %{"id" => 1, "sku" => "AB-12"})
+    :ok = IndexWriter.commit(writer)
+
+    :ok = Document.update(writer, "sku", "AB-12", %{"id" => 9, "sku" => "AB-12"}, schema)
+    :ok = IndexWriter.commit(writer)
+
+    {:ok, searcher} = Searcher.new(index)
+    {:ok, all} = Query.all()
+    assert {:ok, [%{"id" => 9}]} = Searcher.search(searcher, all, 10)
   end
 end

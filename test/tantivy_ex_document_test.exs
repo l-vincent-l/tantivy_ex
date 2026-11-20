@@ -53,7 +53,7 @@ defmodule TantivyExDocumentTest do
       "created_at" => "2023-01-01T00:00:00Z"
     }
 
-    assert {:ok, _result} = Document.add(writer, doc, schema)
+    assert :ok = Document.add(writer, doc, schema)
   end
 
   # Comprehensive tests for add_batch function
@@ -83,8 +83,7 @@ defmodule TantivyExDocumentTest do
       ]
 
       # Default options
-      assert {:ok, results} = Document.add_batch(writer, docs, schema)
-      assert length(results) == 2
+      assert {:ok, 2} = Document.add_batch(writer, docs, schema)
 
       # Commit changes
       # Verify documents were added by searching for them
@@ -97,8 +96,7 @@ defmodule TantivyExDocumentTest do
       assert length(search_results) == 2
     end
 
-    test "adds batch of documents with custom batch size", %{writer: writer, schema: schema} do
-      # Create a larger number of documents to test batch processing
+    test "adds many documents", %{writer: writer, schema: schema} do
       docs =
         Enum.map(1..10, fn i ->
           %{
@@ -111,18 +109,19 @@ defmodule TantivyExDocumentTest do
           }
         end)
 
-      options = %{batch_size: 3, validate: true}
-      assert {:ok, results} = Document.add_batch(writer, docs, schema, options)
-      assert length(results) == 10
+      assert {:ok, 10} = Document.add_batch(writer, docs, schema)
     end
 
     test "handles empty document list", %{writer: writer, schema: schema} do
       docs = []
-      assert {:ok, results} = Document.add_batch(writer, docs, schema)
-      assert results == []
+      assert {:ok, 0} = Document.add_batch(writer, docs, schema)
     end
 
-    test "validates batch with mixed valid/invalid documents", %{writer: writer, schema: schema} do
+    test "adds nothing when a document is invalid", %{
+      writer: writer,
+      schema: schema,
+      index: index
+    } do
       docs = [
         %{
           "title" => "Valid Document",
@@ -141,11 +140,14 @@ defmodule TantivyExDocumentTest do
         }
       ]
 
-      options = %{batch_size: 10, validate: true, continue_on_error: false}
-      assert {:error, errors} = Document.add_batch(writer, docs, schema, options)
-      assert length(errors) > 0
-      # Index of the invalid document
-      assert {1, _reason} = hd(errors)
+      assert {:error, [{1, "Field 'id': Invalid u64 value: \"invalid_id\""}]} =
+               Document.add_batch(writer, docs, schema)
+
+      # Nothing is added
+      :ok = IndexWriter.commit(writer)
+      {:ok, searcher} = Searcher.new(index)
+      {:ok, query} = Query.all()
+      assert {:ok, []} = Searcher.search(searcher, query, 10)
     end
 
     test "continues batch processing on error when continue_on_error is true", %{
@@ -179,11 +181,9 @@ defmodule TantivyExDocumentTest do
         }
       ]
 
-      options = %{batch_size: 10, validate: true, continue_on_error: true}
-      assert {:ok, results} = Document.add_batch(writer, docs, schema, options)
-
-      # Should have processed 2 valid documents
-      assert length(results) == 2
+      # The valid documents are added, and the error gives the invalid one's index
+      assert {:ok, 2, [{1, _reason}]} =
+               Document.add_batch(writer, docs, schema, continue_on_error: true)
 
       # Commit changes
       # Verify only valid documents were added
@@ -196,26 +196,10 @@ defmodule TantivyExDocumentTest do
       assert length(search_results) == 2
     end
 
-    test "skips validation when validate option is false", %{writer: writer, schema: schema} do
-      docs = [
-        %{
-          "title" => "Document 1",
-          "content" => "Content 1",
-          "id" => 1,
-          "score" => 85.0,
-          "published" => true,
-          "created_at" => "2023-01-01T00:00:00Z"
-        },
-        %{
-          # Missing some fields but should still be added as validation is skipped
-          "title" => "Document 2",
-          "id" => 2
-        }
-      ]
-
-      options = %{validate: false}
-      assert {:ok, results} = Document.add_batch(writer, docs, schema, options)
-      assert length(results) == 2
+    test "rejects an unknown option", %{writer: writer, schema: schema} do
+      assert_raise ArgumentError, fn ->
+        Document.add_batch(writer, [], schema, validate: false)
+      end
     end
   end
 
@@ -236,7 +220,7 @@ defmodule TantivyExDocumentTest do
         "created_at" => "2023-01-01T00:00:00Z"
       }
 
-      assert {:ok, _} = Document.add(writer, original_doc, schema)
+      assert :ok = Document.add(writer, original_doc, schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Update the document
@@ -250,7 +234,7 @@ defmodule TantivyExDocumentTest do
         "created_at" => "2023-02-01T00:00:00Z"
       }
 
-      assert {:ok, :updated} = Document.update(writer, "id", "100", updated_doc, schema)
+      assert :ok = Document.update(writer, "id", "100", updated_doc, schema)
       # Verify the update by searching
       assert :ok = IndexWriter.commit(writer)
       {:ok, searcher} = Searcher.new(index)
@@ -283,7 +267,7 @@ defmodule TantivyExDocumentTest do
       }
 
       # This should still succeed as deletion of non-existent docs doesn't fail
-      assert {:ok, :updated} = Document.update(writer, "id", "999", new_doc, schema)
+      assert :ok = Document.update(writer, "id", "999", new_doc, schema)
       # Verify the document was added
       assert :ok = IndexWriter.commit(writer)
       {:ok, searcher} = Searcher.new(index)
@@ -340,11 +324,12 @@ defmodule TantivyExDocumentTest do
         "content" => "Updated content for text field test",
         "id" => 201,
         "score" => 95.0,
-        "published" => true,
+        # Not published: the update by "published" below deletes every published document
+        "published" => false,
         "created_at" => "2023-01-01T00:00:00Z"
       }
 
-      assert {:ok, :updated} =
+      assert :ok =
                Document.update(writer, "title", "Text Field Doc", text_updated_doc, schema)
 
       # Update by boolean field
@@ -358,7 +343,7 @@ defmodule TantivyExDocumentTest do
         "created_at" => "2023-01-02T00:00:00Z"
       }
 
-      assert {:ok, :updated} =
+      assert :ok =
                Document.update(writer, "published", "true", bool_updated_doc, schema)
 
       # Verify the updates
@@ -400,7 +385,7 @@ defmodule TantivyExDocumentTest do
         "created_at" => "2023-01-01T00:00:00Z"
       }
 
-      assert {:ok, _} = Document.add(writer, doc, schema)
+      assert :ok = Document.add(writer, doc, schema)
       # Verify document exists
       assert :ok = IndexWriter.commit(writer)
       {:ok, searcher} = Searcher.new(index)
@@ -410,7 +395,7 @@ defmodule TantivyExDocumentTest do
       assert length(before_results) == 1
 
       # Delete the document
-      assert {:ok, :deleted} = Document.delete(writer, "id", 300, schema)
+      assert :ok = Document.delete(writer, "id", 300, schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Refresh searcher to see changes
@@ -423,7 +408,7 @@ defmodule TantivyExDocumentTest do
 
     test "deleting non-existent document doesn't fail", %{writer: writer, schema: schema} do
       # Try to delete a document that doesn't exist
-      assert {:ok, :deleted} = Document.delete(writer, "id", "999999", schema)
+      assert :ok = Document.delete(writer, "id", "999999", schema)
       assert :ok = IndexWriter.commit(writer)
     end
 
@@ -470,7 +455,7 @@ defmodule TantivyExDocumentTest do
       assert length(all_results) == 3
 
       # Delete documents with published = true
-      assert {:ok, :deleted} = Document.delete(writer, "published", "true", schema)
+      assert :ok = Document.delete(writer, "published", "true", schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Refresh searcher to see changes
@@ -518,13 +503,13 @@ defmodule TantivyExDocumentTest do
       assert :ok = IndexWriter.commit(writer)
 
       # Delete by text field
-      assert {:ok, :deleted} = Document.delete(writer, "title", "Text Term Doc", schema)
+      assert :ok = Document.delete(writer, "title", "Text Term Doc", schema)
 
       # Delete by numeric field
-      assert {:ok, :deleted} = Document.delete(writer, "id", "502", schema)
+      assert :ok = Document.delete(writer, "id", "502", schema)
 
       # Delete by boolean field
-      assert {:ok, :deleted} = Document.delete(writer, "published", "false", schema)
+      assert :ok = Document.delete(writer, "published", "false", schema)
 
       # Verify all documents were deleted
       assert :ok = IndexWriter.commit(writer)
@@ -582,7 +567,6 @@ defmodule TantivyExDocumentTest do
       "created_at" => "2023-06-15T14:30:00Z"
     }
 
-    assert {:ok, json_doc} = Document.prepare_json(doc, schema)
-    assert is_binary(json_doc)
+    assert {:ok, %{"id" => 456, "title" => "JSON Test"}} = Document.prepare_json(doc, schema)
   end
 end

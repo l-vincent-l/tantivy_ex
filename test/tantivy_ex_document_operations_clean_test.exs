@@ -46,8 +46,7 @@ defmodule TantivyExDocumentOperationsCleanTest do
       ]
 
       # Add documents with validation
-      assert {:ok, results} = Document.add_batch(writer, docs, schema)
-      assert length(results) == 2
+      assert {:ok, 2} = Document.add_batch(writer, docs, schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Check documents were indexed properly
@@ -84,8 +83,8 @@ defmodule TantivyExDocumentOperationsCleanTest do
                Document.add_batch(writer, docs, schema, %{continue_on_error: false})
 
       # With continue_on_error: true, should process valid documents
-      assert {:ok, results} = Document.add_batch(writer, docs, schema, %{continue_on_error: true})
-      assert length(results) == 1
+      assert {:ok, 1, [{1, _reason}]} =
+               Document.add_batch(writer, docs, schema, %{continue_on_error: true})
     end
   end
 
@@ -105,7 +104,7 @@ defmodule TantivyExDocumentOperationsCleanTest do
         "created_at" => "2023-01-01T00:00:00Z"
       }
 
-      assert {:ok, _} = Document.add(writer, doc, schema)
+      assert :ok = Document.add(writer, doc, schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Update the document
@@ -119,7 +118,7 @@ defmodule TantivyExDocumentOperationsCleanTest do
       }
 
       # Use string value for term matching
-      assert {:ok, :updated} = Document.update(writer, "id", "100", updated_doc, schema)
+      assert :ok = Document.update(writer, "id", "100", updated_doc, schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Verify the update with all_query and check fields
@@ -145,7 +144,7 @@ defmodule TantivyExDocumentOperationsCleanTest do
         "created_at" => "2023-01-01T00:00:00Z"
       }
 
-      assert {:ok, _} = Document.add(writer, doc, schema)
+      assert :ok = Document.add(writer, doc, schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Update using published field
@@ -158,7 +157,7 @@ defmodule TantivyExDocumentOperationsCleanTest do
         "created_at" => "2023-02-01T00:00:00Z"
       }
 
-      assert {:ok, :updated} = Document.update(writer, "published", "true", updated_doc, schema)
+      assert :ok = Document.update(writer, "published", "true", updated_doc, schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Verify the update
@@ -189,7 +188,7 @@ defmodule TantivyExDocumentOperationsCleanTest do
         "created_at" => "2023-01-01T00:00:00Z"
       }
 
-      assert {:ok, _} = Document.add(writer, doc, schema)
+      assert :ok = Document.add(writer, doc, schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Verify document exists
@@ -199,7 +198,7 @@ defmodule TantivyExDocumentOperationsCleanTest do
       assert length(before_results) == 1
 
       # Delete by string term value
-      assert {:ok, :deleted} = Document.delete(writer, "id", "300", schema)
+      assert :ok = Document.delete(writer, "id", "300", schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Verify document was deleted
@@ -239,7 +238,7 @@ defmodule TantivyExDocumentOperationsCleanTest do
       assert length(before_results) == 2
 
       # Delete published documents
-      assert {:ok, :deleted} = Document.delete(writer, "published", "true", schema)
+      assert :ok = Document.delete(writer, "published", "true", schema)
       assert :ok = IndexWriter.commit(writer)
 
       # Verify only unpublished document remains
