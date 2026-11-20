@@ -274,8 +274,11 @@ defmodule TantivyEx.SchemaFieldTypesTest do
 
   describe "error handling" do
     test "rejects an invalid field option" do
+      # Built at runtime: the type checker rejects a literal outside the option type
+      option = String.to_atom("invalid_option")
+
       assert_raise ArgumentError, "unknown field option: :invalid_option", fn ->
-        Schema.add_i64_field(Schema.new(), "test", :invalid_option)
+        Schema.add_i64_field(Schema.new(), "test", option)
       end
     end
 

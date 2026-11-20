@@ -19,7 +19,6 @@ defmodule TantivyEx.ConcurrencyTest do
   """
 
   use ExUnit.Case, async: false
-  require Logger
 
   alias TantivyEx.{Schema, Index, IndexWriter, Searcher, Query}
 
