@@ -34,6 +34,8 @@ defmodule TantivyEx.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:rustler_precompiled, "~> 0.10"},
+      # Required to build the NIF where no precompiled one is available
       {:rustler, "~> 0.38", runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:jason, "~> 1.4"}
@@ -48,7 +50,7 @@ defmodule TantivyEx.MixProject do
     [
       name: "tantivy_ex",
       files:
-        ~w(lib priv native/tantivy_ex/src native/tantivy_ex/Cargo.toml native/tantivy_ex/Cargo.lock native/tantivy_ex/Cross.toml docs .formatter.exs mix.exs README* LICENSE* CHANGELOG*),
+        ~w(lib priv native/tantivy_ex/src native/tantivy_ex/Cargo.toml native/tantivy_ex/Cargo.lock native/tantivy_ex/Cross.toml docs .formatter.exs mix.exs README* LICENSE* CHANGELOG* checksum-Elixir.TantivyEx.Native.exs),
       licenses: ["MIT"],
       links: %{
         "GitHub" => @source_url,

@@ -17,6 +17,7 @@ jobs:
 
     env:
       MIX_ENV: test
+      TANTIVY_EX_BUILD: true
       PHX_CI: true
 
     strategy:

@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
-
+# Writes checksum-Elixir.TantivyEx.Native.exs from the precompiled NIFs of the
+# GitHub release of the current version (published by .github/workflows/release.yml).
 set -euo pipefail
-
-REPO="alexiob/tantivy_ex"
-OUT_FILE="checksum-Elixir.TantivyEx.Native.exs"
-TMP_DIR=$(mktemp -d)
-VERSION="0.4.1"
-
-# Fetch all release assets from GitHub API
-assets=$(gh release view v$VERSION --json assets --jq '.assets[] | select(.name | test("\\.tar\\.gz$")) | .browser_download_url + " \"" + .name + "\" => \"" + .digest + "\","')
-
-(echo "%{$assets}")  > "$OUT_FILE"
+cd "$(dirname "$0")/.."
+mix rustler_precompiled.download TantivyEx.Native --all --print

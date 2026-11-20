@@ -58,10 +58,12 @@ def deps do
 end
 ```
 
-The NIF is compiled from source, which requires:
+It requires **Elixir** 1.17 or later, on **Erlang/OTP** 27 or later.
 
-- **Elixir** 1.17 or later, on **Erlang/OTP** 27 or later
-- **Rust** 1.91 or later
+A precompiled NIF is downloaded for macOS (x86_64, aarch64), Linux (x86_64,
+aarch64, arm, riscv64, with glibc) and Windows (x86_64). Elsewhere, or with
+`TANTIVY_EX_BUILD=1`, the NIF is compiled from source, which requires
+**Rust** 1.91 or later.
 
 ## Documentation
 
