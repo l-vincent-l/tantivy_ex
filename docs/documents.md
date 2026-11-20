@@ -1,904 +1,243 @@
-# Document Guide
+# Documents Guide
 
-This comprehensive guide covers document operations in TantivyEx, including creation, validation, indexing, and best practices for working with documents.
+A document is a map of field names to values. This guide shows the values
+each field type takes, how `TantivyEx.Document` validates and converts them,
+and how to add, update and delete documents.
 
-## Table of Contents
+## Related Documentation
 
-- [Document Fundamentals](#document-fundamentals)
-- [Document Creation](#document-creation)
-- [Field Types and Values](#field-types-and-values)
-- [Document Validation](#document-validation)
-- [Indexing Operations](#indexing-operations)
-- [Batch Processing](#batch-processing)
-- [Advanced Topics](#advanced-topics)
-- [Best Practices](#best-practices)
-- [Troubleshooting](#troubleshooting)
+- **[Schema Design](schema.md)**: the field types and their options
+- **[Indexing](indexing.md)**: writers, commits and index storage
+- **[Search](search.md)**: querying the documents
 
-## Document Fundamentals
+## The Values of a Document
 
-### What is a Document?
-
-In TantivyEx, a document is a collection of fields and their values that represents a single unit of data in your search index. Documents are typically represented as Elixir maps where keys are field names and values are the field data.
+The examples of this guide use this schema:
 
 ```elixir
-# Basic document structure
-document = %{
-  "title" => "Introduction to Elixir",
-  "content" => "Elixir is a dynamic, functional language designed for building maintainable applications.",
-  "author" => "José Valim",
-  "published_at" => "2011-07-11T00:00:00Z",
-  "tags" => "/programming/functional/elixir",
-  "price" => 49.99,
-  "available" => true
-}
+alias TantivyEx.{Schema, Index, IndexWriter, Searcher, Query, Document}
+
+schema =
+  Schema.new()
+  |> Schema.add_u64_field("id", :indexed_stored)
+  |> Schema.add_text_field("title", :text_stored)
+  |> Schema.add_text_field_with_tokenizer("sku", :text_stored, "raw")
+  |> Schema.add_text_field("tags", :text_stored)
+  |> Schema.add_f64_field("price", :fast_stored)
+  |> Schema.add_bool_field("in_stock", :indexed_stored)
+  |> Schema.add_date_field("added_at", :fast_stored)
+  |> Schema.add_facet_field("category")
+  |> Schema.add_json_field("specs", :text_stored)
+
+{:ok, index} = Index.create_in_ram(schema)
+{:ok, writer} = IndexWriter.new(index)
 ```
 
-### Document Schema Relationship
+Each field takes values of its type:
 
-Documents must conform to the schema you've defined for your index. The schema determines:
+| Field type | Values |
+|---|---|
+| text | a string |
+| u64, i64 | an integer (non-negative for u64) |
+| f64 | a number |
+| bool | `true` or `false` |
+| date | an ISO 8601 string, or a Unix timestamp in seconds |
+| facet | a path, such as `"/electronics/keyboards"` |
+| bytes | a base64 string |
+| JSON | a map, or a string of a JSON object |
+| IP address | an IPv4 or IPv6 string |
 
-- Which fields are available
-- What types of data each field can contain
-- How fields are indexed and stored
-- Whether fields support faceting, full-text search, or fast filtering
+A list gives a field several values. A field can be left out:
 
 ```elixir
-# Define schema first
-{:ok, schema} = TantivyEx.Schema.new()
-  |> TantivyEx.Schema.add_text_field("title", stored: true, indexed: true)
-  |> TantivyEx.Schema.add_text_field("content", stored: true, indexed: true)
-  |> TantivyEx.Schema.add_u64_field("price", stored: true, fast: true)
-  |> TantivyEx.Schema.build()
+:ok =
+  IndexWriter.add_document(writer, %{
+    "id" => 1,
+    "title" => "Mechanical keyboard",
+    "sku" => "KB-001",
+    "tags" => ["keyboard", "mechanical"],
+    "price" => 89.5,
+    "in_stock" => true,
+    "added_at" => "2024-01-15T10:30:00Z",
+    "category" => "/electronics/keyboards",
+    "specs" => %{"switches" => "brown", "layout" => "ISO"}
+  })
 
-# Then create documents that match the schema
-document = %{
-  "title" => "Sample Document",
-  "content" => "This document matches our schema perfectly.",
-  "price" => 1999  # Note: price as integer (u64)
-}
+:ok = IndexWriter.add_document(writer, %{"id" => 2, "title" => "Wireless mouse"})
 ```
 
-## Document Creation
-
-### Basic Document Creation
-
-Create documents as simple Elixir maps:
+`IndexWriter.add_document/2` takes the values as they are, and rejects a
+value of the wrong type or an unknown field:
 
 ```elixir
-# Text document for a blog post
-blog_post = %{
-  "title" => "Getting Started with TantivyEx",
-  "content" => "TantivyEx brings powerful full-text search capabilities to Elixir applications...",
-  "author" => "Your Name",
-  "published_at" => "2024-01-15T10:30:00Z",
-  "category" => "/blog/tutorials/elixir"
-}
+{:error, "Field 'id': Expected numeric value"} =
+  IndexWriter.add_document(writer, %{"id" => "3"})
 
-# Product document for e-commerce
-product = %{
-  "name" => "Wireless Headphones",
-  "description" => "High-quality wireless headphones with noise cancellation",
-  "price" => 19999,  # Price in cents
-  "brand" => "AudioTech",
-  "category" => "/electronics/audio/headphones",
-  "in_stock" => true,
-  "release_date" => "2024-01-01T00:00:00Z"
-}
-
-# User document for search
-user = %{
-  "username" => "john_doe",
-  "email" => "john@example.com",
-  "full_name" => "John Doe",
-  "bio" => "Software developer with 10 years of experience",
-  "location" => "San Francisco, CA",
-  "joined_at" => "2023-06-15T14:22:00Z",
-  "is_verified" => true
-}
+{:error, "Unknown field: 'colour'"} =
+  IndexWriter.add_document(writer, %{"id" => 3, "colour" => "red"})
 ```
 
-### Dynamic Document Creation
+## Validating and Converting
 
-Build documents programmatically:
+`Document.validate/2` checks a document against the schema, and converts the
+values that can be: a numeric string for a numeric field, `"true"` or
+`"false"` for a bool field, a `DateTime` for a date field, a path without its
+leading slash for a facet field. Data from a form or a CSV file comes as
+strings:
 
 ```elixir
-def create_article_document(article, author) do
-  %{
-    "title" => article.title,
-    "content" => article.body,
-    "author" => author.name,
-    "author_id" => author.id,
-    "published_at" => DateTime.to_iso8601(article.published_at),
-    "word_count" => String.split(article.body) |> length(),
-    "category" => "/articles/#{article.category}",
-    "tags" => Enum.join(article.tags, " "),
-    "featured" => article.featured?,
-    "views" => article.view_count
-  }
-end
+Document.validate(%{"id" => "3", "price" => "19.99", "in_stock" => "false"}, schema)
+# => {:ok, %{"id" => 3, "price" => 19.99, "in_stock" => false}}
 
-# Usage
-document = create_article_document(article, author)
+Document.validate(%{"category" => "electronics/mice"}, schema)
+# => {:ok, %{"category" => "/electronics/mice"}}
 ```
 
-## Field Types and Values
-
-### Text Fields
-
-Text fields support full-text search and tokenization:
+An invalid document gives the field and the reason:
 
 ```elixir
-# Simple text
-%{"title" => "Machine Learning Basics"}
+Document.validate(%{"id" => -1}, schema)
+# => {:error, "Document validation failed: Field 'id': Invalid u64 value: -1"}
 
-# Long text content
-%{
-  "content" => """
-  Machine learning is a method of data analysis that automates analytical
-  model building. It is a branch of artificial intelligence based on the
-  idea that systems can learn from data, identify patterns and make
-  decisions with minimal human intervention.
-  """
-}
-
-# Multiple language support
-%{
-  "title_en" => "Hello World",
-  "title_es" => "Hola Mundo",
-  "title_fr" => "Bonjour le Monde"
-}
+Document.validate(%{"colour" => "red"}, schema)
+# => {:error, "Document validation failed: Unknown field: 'colour'"}
 ```
 
-### Numeric Fields
-
-Numeric fields support range queries and sorting:
+`Document.add/3` validates a document, then adds it:
 
 ```elixir
-# Unsigned 64-bit integers (u64)
-%{
-  "price" => 2999,        # Price in cents
-  "views" => 1024,        # View count
-  "likes" => 42           # Social engagement
-}
+:ok =
+  Document.add(
+    writer,
+    %{"id" => "3", "title" => "USB cable", "price" => "9", "added_at" => ~U[2024-03-01 09:00:00Z]},
+    schema
+  )
 
-# Signed 64-bit integers (i64)
-%{
-  "temperature" => -15,   # Can be negative
-  "elevation" => 2847,    # Altitude in meters
-  "score_diff" => -5      # Score difference
-}
+{:error, "Document validation failed: Field 'price': Invalid f64 value: \"cheap\""} =
+  Document.add(writer, %{"id" => 4, "price" => "cheap"}, schema)
 
-# Floating-point numbers (f64)
-%{
-  "rating" => 4.7,        # Star rating
-  "longitude" => -122.4194, # GPS coordinates
-  "latitude" => 37.7749,
-  "price_usd" => 29.99    # Decimal price
-}
+:ok = IndexWriter.commit(writer)
+{:ok, searcher} = Searcher.new(index)
+{:ok, [cable]} = Searcher.search(searcher, "id:3", 10)
+{cable["price"], cable["added_at"]}
+# => {9.0, "2024-03-01T09:00:00Z"}
 ```
 
-### Boolean Fields
+## Adding Documents in Batches
 
-Boolean fields for true/false values:
-
-```elixir
-%{
-  "published" => true,
-  "featured" => false,
-  "in_stock" => true,
-  "on_sale" => false,
-  "verified" => true
-}
-```
-
-### Date Fields
-
-Date and time values (stored as Unix timestamps):
+`Document.add_batch/4` validates all the documents first. If one is invalid,
+nothing is added, and the errors give the position of each invalid document
+in the list:
 
 ```elixir
-# ISO 8601 string format (recommended)
-%{
-  "created_at" => "2024-01-15T10:30:00Z",
-  "updated_at" => "2024-01-15T14:45:30.123Z",
-  "published_at" => "2024-01-15T09:00:00-08:00"  # With timezone
-}
-
-# Unix timestamp (integer seconds)
-%{
-  "created_at" => 1705317000,  # Equivalent to above
-  "expires_at" => 1705403400   # 24 hours later
-}
-
-# Current time helper
-%{
-  "indexed_at" => DateTime.utc_now() |> DateTime.to_iso8601()
-}
-```
-
-### Facet Fields
-
-Hierarchical facets for categorization and filtering:
-
-```elixir
-%{
-  # Product categories
-  "category" => "/electronics/computers/laptops",
-
-  # Geographic hierarchy
-  "location" => "/usa/california/san_francisco",
-
-  # Content taxonomy
-  "topic" => "/programming/languages/elixir/otp",
-
-  # Multi-level tags
-  "tags" => "/blog/technical/tutorial"
-}
-
-# Multiple facets
-%{
-  "primary_category" => "/books/fiction/mystery",
-  "secondary_category" => "/books/bestsellers",
-  "age_rating" => "/ratings/mature"
-}
-```
-
-### Binary Data (Bytes)
-
-Store binary data as base64-encoded strings:
-
-```elixir
-# Base64-encoded data
-%{
-  "thumbnail" => "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-  "signature" => "SGVsbG8gV29ybGQ=",  # "Hello World" in base64
-  "metadata" => Base.encode64(Jason.encode!(%{version: "1.0", type: "image"}))
-}
-
-# Binary data from files
-%{
-  "file_content" => File.read!("document.pdf") |> Base.encode64(),
-  "image_data" => File.read!("image.png") |> Base.encode64()
-}
-```
-
-### JSON Objects
-
-Complex nested data structures:
-
-```elixir
-%{
-  "metadata" => %{
-    "version" => "2.1",
-    "format" => "json",
-    "compression" => "gzip",
-    "size_bytes" => 1024
-  },
-
-  "settings" => %{
-    "notifications" => %{
-      "email" => true,
-      "push" => false,
-      "sms" => true
-    },
-    "privacy" => %{
-      "public_profile" => false,
-      "show_email" => false
-    }
-  }
-}
-```
-
-### IP Addresses
-
-IPv4 and IPv6 addresses:
-
-```elixir
-%{
-  "client_ip" => "192.168.1.1",           # IPv4
-  "server_ip" => "2001:db8::1",           # IPv6
-  "proxy_ip" => "10.0.0.1",               # Private IPv4
-  "cdn_ip" => "2606:4700:3034::ac43:c427" # IPv6 CDN
-}
-```
-
-## Document Validation
-
-### Schema-Based Validation
-
-Validate documents against your schema before indexing:
-
-```elixir
-# Define your schema
-{:ok, schema} = TantivyEx.Schema.new()
-  |> TantivyEx.Schema.add_text_field("title", stored: true)
-  |> TantivyEx.Schema.add_u64_field("price", stored: true)
-  |> TantivyEx.Schema.add_bool_field("available", stored: true)
-  |> TantivyEx.Schema.build()
-
-# Create a document
-document = %{
-  "title" => "Product Name",
-  "price" => 1999,
-  "available" => true
-}
-
-# Validate the document
-case TantivyEx.Document.validate(document, schema) do
-  {:ok, validated_doc} ->
-    IO.puts("Document is valid!")
-    # Proceed with indexing
-
-  {:error, reason} ->
-    IO.puts("Validation failed: #{reason}")
-    # Handle validation error
-end
-```
-
-### Type Conversion and Validation
-
-TantivyEx automatically converts compatible types:
-
-```elixir
-# These values will be automatically converted:
-document = %{
-  "price" => "1999",           # String -> u64
-  "rating" => "4.5",           # String -> f64
-  "available" => "true",       # String -> boolean
-  "count" => 42.0              # f64 -> u64 (if whole number)
-}
-
-# Validation with helpful error messages
-{:error, "Field 'price': Expected numeric value"} =
-  TantivyEx.Document.validate(%{"price" => "not_a_number"}, schema)
-```
-
-### Custom Validation Functions
-
-Create custom validation logic:
-
-```elixir
-defmodule MyApp.DocumentValidator do
-  def validate_product(document) do
-    with {:ok, doc} <- validate_required_fields(document),
-         {:ok, doc} <- validate_price_range(doc),
-         {:ok, doc} <- validate_category_format(doc) do
-      {:ok, doc}
-    end
-  end
-
-  defp validate_required_fields(doc) do
-    required = ["title", "price", "category"]
-    missing = required -- Map.keys(doc)
-
-    case missing do
-      [] -> {:ok, doc}
-      fields -> {:error, "Missing required fields: #{Enum.join(fields, ", ")}"}
-    end
-  end
-
-  defp validate_price_range(doc) do
-    price = Map.get(doc, "price", 0)
-
-    if price > 0 and price < 1_000_000 do
-      {:ok, doc}
-    else
-      {:error, "Price must be between 1 and 999,999"}
-    end
-  end
-
-  defp validate_category_format(doc) do
-    category = Map.get(doc, "category", "")
-
-    if String.starts_with?(category, "/") do
-      {:ok, doc}
-    else
-      {:error, "Category must start with '/'"}
-    end
-  end
-end
-```
-
-## Indexing Operations
-
-### Single Document Indexing
-
-Add individual documents to the index:
-
-```elixir
-# Create or open an index and get a writer
-{:ok, index} = TantivyEx.Index.create_in_dir("path/to/index", schema)
-{:ok, writer} = TantivyEx.IndexWriter.new(index)
-
-# Create and validate document
-document = %{
-  "title" => "New Article",
-  "content" => "Article content here...",
-  "published_at" => DateTime.utc_now() |> DateTime.to_iso8601()
-}
-
-# Add document to index
-case TantivyEx.IndexWriter.add_document(writer, document) do
-  :ok ->
-    IO.puts("Document indexed successfully")
-
-  {:error, reason} ->
-    IO.puts("Failed to index document: #{reason}")
-end
-
-# Commit changes to make them searchable
-:ok = TantivyEx.IndexWriter.commit(writer)
-```
-
-### Schema-Aware Indexing
-
-Use schema information for better type handling:
-
-```elixir
-# Add document with schema validation
-case TantivyEx.IndexWriter.add_document(writer, document) do
-  :ok ->
-    IO.puts("Document added with schema validation")
-
-  {:error, reason} ->
-    IO.puts("Schema validation failed: #{reason}")
-end
-```
-
-### Handling Indexing Errors
-
-Robust error handling for production use:
-
-```elixir
-def safely_index_document(writer, document, schema) do
-  try do
-    case TantivyEx.Document.validate(document, schema) do
-      {:ok, validated_doc} ->
-        case TantivyEx.Document.add_with_schema(writer, validated_doc, schema) do
-          :ok ->
-            {:ok, :indexed}
-          {:error, reason} ->
-            {:error, {:indexing_failed, reason}}
-        end
-
-      {:error, reason} ->
-        {:error, {:validation_failed, reason}}
-    end
-  rescue
-    exception ->
-      {:error, {:exception, Exception.message(exception)}}
-  end
-end
-```
-
-## Batch Processing
-
-### Batch Document Addition
-
-Process multiple documents efficiently:
-
-```elixir
-# Prepare batch of documents
-documents = [
-  %{"title" => "Doc 1", "content" => "Content 1"},
-  %{"title" => "Doc 2", "content" => "Content 2"},
-  %{"title" => "Doc 3", "content" => "Content 3"}
+batch = [
+  %{"id" => 10, "title" => "Monitor stand"},
+  %{"id" => "eleven", "title" => "Desk lamp"},
+  %{"id" => 12, "title" => "Webcam"}
 ]
 
-# Batch add with comprehensive results
-case TantivyEx.Document.add_batch(writer, documents, schema) do
-  {:ok, results} ->
-    IO.puts("Batch completed: #{results}")
-    # Results format: {"successful": 3, "errors": 0}
-
-  {:error, errors} ->
-    IO.puts("Batch had errors: #{inspect(errors)}")
-    # Errors format: [{index, error_message}, ...]
-end
+Document.add_batch(writer, batch, schema)
+# => {:error, [{1, "Field 'id': Invalid u64 value: \"eleven\""}]}
 ```
 
-### Processing Large Datasets
-
-Handle large document collections efficiently:
+With `continue_on_error: true`, the valid documents are added, and the
+invalid ones are returned with their errors:
 
 ```elixir
-defmodule MyApp.BulkIndexer do
-  @batch_size 1000
+Document.add_batch(writer, batch, schema, continue_on_error: true)
+# => {:ok, 2, [{1, "Field 'id': Invalid u64 value: \"eleven\""}]}
 
-  def index_all_documents(writer, documents, schema) do
-    documents
-    |> Stream.chunk_every(@batch_size)
-    |> Stream.with_index()
-    |> Enum.reduce({0, []}, fn {batch, batch_num}, {total_success, all_errors} ->
-      IO.puts("Processing batch #{batch_num + 1}")
-
-      case TantivyEx.Document.add_batch(writer, batch, schema) do
-        {:ok, result} ->
-          success_count = parse_success_count(result)
-          {total_success + success_count, all_errors}
-
-        {:error, errors} ->
-          {total_success, all_errors ++ errors}
-      end
-    end)
-  end
-
-  defp parse_success_count(result_json) do
-    case Jason.decode(result_json) do
-      {:ok, %{"successful" => count}} -> count
-      _ -> 0
-    end
-  end
-end
-
-# Usage
-{success_count, errors} = MyApp.BulkIndexer.index_all_documents(writer, documents, schema)
-IO.puts("Indexed #{success_count} documents with #{length(errors)} errors")
+Document.add_batch(writer, [%{"id" => 13}, %{"id" => 14}], schema)
+# => {:ok, 2}
 ```
 
-### Memory-Efficient Streaming
+The [Indexing guide](indexing.md) shows how to index a large source in
+batches.
 
-Stream large datasets without loading everything into memory:
+## Updating and Deleting Documents
+
+Tantivy has no in-place update: `Document.update/5` deletes the documents
+whose field has the given value, and adds the new version.
+`Document.delete/4` only deletes them. Both need a commit to be visible, like
+additions:
 
 ```elixir
-defmodule MyApp.StreamingIndexer do
-  def index_from_stream(writer, document_stream, schema) do
-    document_stream
-    |> Stream.map(&validate_and_prepare/1)
-    |> Stream.filter(&match?({:ok, _}, &1))
-    |> Stream.map(fn {:ok, doc} -> doc end)
-    |> Stream.chunk_every(500)
-    |> Enum.each(fn batch ->
-      case TantivyEx.Document.add_batch(writer, batch, schema) do
-        {:ok, _} -> :ok
-        {:error, errors} ->
-          Logger.error("Batch indexing errors: #{inspect(errors)}")
-      end
-    end)
-  end
+:ok = Document.update(writer, "id", 3, %{"id" => 3, "title" => "USB-C cable", "price" => 12.0}, schema)
+:ok = Document.delete(writer, "id", 2, schema)
+:ok = IndexWriter.commit(writer)
 
-  defp validate_and_prepare(raw_document) do
-    # Custom preparation logic
-    case prepare_document(raw_document) do
-      {:ok, doc} -> {:ok, doc}
-      {:error, reason} ->
-        Logger.warning("Document preparation failed: #{reason}")
-        {:error, reason}
-    end
-  end
-end
+{:ok, searcher} = Searcher.new(index)
+{:ok, [updated]} = Searcher.search(searcher, "id:3", 10)
+updated["title"]
+# => "USB-C cable"
+Searcher.search(searcher, "id:2", 10)
+# => {:ok, []}
 ```
 
-## Advanced Topics
+The new version replaces the whole document: give all its fields, not only
+the changed ones. Read the others from your source of documents, or from the
+stored fields of the old version.
 
-### Document Updates
+### Identifying documents
 
-TantivyEx doesn't support in-place updates, but you can rebuild indices:
+The value is matched as a search would match it. A text value goes through
+the field's tokenizer: on a `"default"` text field, `"Mechanical keyboard"`
+matches every title containing these two words, in this order. Identify
+documents by a numeric field, or by a text field with the `"raw"` tokenizer,
+which keeps the whole value as one term:
 
 ```elixir
-defmodule MyApp.DocumentUpdater do
-  def update_document(old_index_path, new_index_path, doc_id, updates, schema) do
-    # Create new index
-    {:ok, new_index} = TantivyEx.Index.create(new_index_path, schema)
-    {:ok, writer} = TantivyEx.IndexWriter.new(new_index)
+:ok = Document.delete(writer, "sku", "KB-001", schema)
+:ok = IndexWriter.commit(writer)
 
-    # Copy all documents except the one being updated
-    {:ok, searcher} = TantivyEx.Searcher.new(old_index_path)
-
-    # This is a simplified approach - in practice you'd want to
-    # stream through all documents more efficiently
-    documents = get_all_documents(searcher)
-
-    updated_documents = documents
-    |> Enum.map(fn doc ->
-      if doc["id"] == doc_id do
-        Map.merge(doc, updates)
-      else
-        doc
-      end
-    end)
-
-    # Index all documents to new index
-    case TantivyEx.IndexWriter.add_document(writer, updated_documents) do
-      :ok ->
-        :ok = TantivyEx.IndexWriter.commit(writer)
-        {:ok, new_index}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-end
+{:ok, searcher} = Searcher.new(index)
+Searcher.search(searcher, "id:1", 10)
+# => {:ok, []}
 ```
 
-### Document Deletion
-
-Implement document deletion through index rebuilding:
+Deleting a value that no document has is not an error. An unknown field is:
 
 ```elixir
-def delete_documents(index_path, new_index_path, doc_ids, schema) do
-  delete_set = MapSet.new(doc_ids)
+:ok = Document.delete(writer, "id", 999, schema)
 
-  {:ok, new_index} = TantivyEx.Index.create(new_index_path, schema)
-  {:ok, writer} = TantivyEx.IndexWriter.new(new_index)
-
-  # Copy all documents except those being deleted
-  documents = get_all_documents_from_index(index_path)
-
-  filtered_documents = Enum.reject(documents, fn doc ->
-    MapSet.member?(delete_set, doc["id"])
-  end)
-
-  case TantivyEx.Document.add_batch(writer, filtered_documents, schema) do
-    {:ok, _} ->
-      :ok = TantivyEx.IndexWriter.commit(writer)
-      {:ok, new_index}
-
-    {:error, reason} ->
-      {:error, reason}
-  end
-end
+Document.delete(writer, "colour", "red", schema)
+# => {:error, "Field 'colour' not found in schema"}
 ```
 
-### Complex Document Structures
-
-Handle nested data and complex transformations:
+To delete the documents matching any query, use
+`IndexWriter.delete_documents/2`:
 
 ```elixir
-defmodule MyApp.ComplexDocuments do
-  def transform_product_for_search(product) do
-    %{
-      "id" => product.id,
-      "name" => product.name,
-      "description" => product.description,
+{:ok, cheap} = Query.range_f64(schema, "price", 0.0, 15.0)
+:ok = IndexWriter.delete_documents(writer, cheap)
+:ok = IndexWriter.commit(writer)
 
-      # Flatten nested attributes
-      "brand" => product.brand.name,
-      "brand_id" => product.brand.id,
-
-      # Create searchable text from multiple fields
-      "searchable_text" => build_searchable_text(product),
-
-      # Price information
-      "price_cents" => product.price_cents,
-      "price_usd" => product.price_cents / 100.0,
-
-      # Category hierarchy
-      "category" => build_category_path(product.categories),
-
-      # Inventory data
-      "in_stock" => product.inventory.quantity > 0,
-      "quantity" => product.inventory.quantity,
-
-      # Dates
-      "created_at" => DateTime.to_iso8601(product.inserted_at),
-      "updated_at" => DateTime.to_iso8601(product.updated_at),
-
-      # Features and tags
-      "features" => Enum.join(product.features, " "),
-      "tags" => build_tag_facets(product.tags)
-    }
-  end
-
-  defp build_searchable_text(product) do
-    [
-      product.name,
-      product.description,
-      product.brand.name,
-      Enum.join(product.features, " "),
-      Enum.map(product.tags, & &1.name) |> Enum.join(" ")
-    ]
-    |> Enum.join(" ")
-    |> String.downcase()
-  end
-
-  defp build_category_path(categories) do
-    categories
-    |> Enum.map(& &1.slug)
-    |> Enum.join("/")
-    |> then(&"/#{&1}")
-  end
-
-  defp build_tag_facets(tags) do
-    tags
-    |> Enum.map(& &1.category)
-    |> Enum.uniq()
-    |> Enum.join("/")
-    |> then(&"/tags/#{&1}")
-  end
-end
+{:ok, searcher} = Searcher.new(index)
+Searcher.search(searcher, "id:3", 10)
+# => {:ok, []}
 ```
 
-## Best Practices
+## Documents from JSON
 
-### Document Design Principles
-
-1. **Keep Fields Focused**: Each field should have a single, clear purpose
-2. **Use Appropriate Types**: Choose the right field type for your data
-3. **Design for Queries**: Structure documents to support your search patterns
-4. **Normalize When Appropriate**: Consider denormalizing data for search performance
+`Document.prepare_json/3` builds a document from a JSON object, a string or
+a decoded map, and validates it. A mapping picks the values by their path in
+the object:
 
 ```elixir
-# Good: Clear field purposes
-%{
-  "title" => "Document title",
-  "content" => "Main document content",
-  "author" => "Author name",
-  "published_at" => "2024-01-15T10:30:00Z",
-  "word_count" => 1500,
-  "category" => "/articles/technical"
+json = ~s({"product": {"ref": 20, "name": "Keyboard tray"}, "pricing": {"amount": "24.5"}})
+
+mapping = %{
+  "product.ref" => "id",
+  "product.name" => "title",
+  "pricing.amount" => "price"
 }
 
-# Avoid: Mixed purposes in single fields
-%{
-  "metadata" => "Title: Document | Author: John | Date: 2024-01-15"  # Hard to search
-}
+{:ok, tray} = Document.prepare_json(json, schema, mapping)
+tray
+# => %{"id" => 20, "title" => "Keyboard tray", "price" => 24.5}
+
+:ok = Document.add(writer, tray, schema)
 ```
 
-### Performance Optimization
-
-1. **Batch Operations**: Use batch processing for multiple documents
-2. **Schema Design**: Design schema fields to match query patterns
-3. **Field Options**: Use appropriate indexing options (stored, fast, indexed)
-4. **Memory Management**: Process large datasets in chunks
-
-```elixir
-# Efficient batch processing
-def index_efficiently(writer, large_dataset, schema) do
-  large_dataset
-  |> Stream.chunk_every(1000)  # Process in batches
-  |> Stream.map(fn batch ->
-    # Pre-validate batch
-    validated_batch = Enum.filter(batch, &valid_document?/1)
-    TantivyEx.Document.add_batch(writer, validated_batch, schema)
-  end)
-  |> Stream.run()  # Execute the stream
-end
-```
-
-### Error Handling
-
-1. **Validate Early**: Check documents before attempting to index
-2. **Graceful Degradation**: Handle partial failures in batch operations
-3. **Logging**: Log validation and indexing errors for debugging
-4. **Recovery**: Implement retry logic for transient failures
-
-```elixir
-defmodule MyApp.SafeIndexer do
-  require Logger
-
-  def safe_index(writer, document, schema, retries \\ 3) do
-    case TantivyEx.Document.validate(document, schema) do
-      {:ok, validated_doc} ->
-        attempt_index(writer, validated_doc, schema, retries)
-
-      {:error, reason} ->
-        Logger.error("Document validation failed: #{reason}")
-        {:error, {:validation, reason}}
-    end
-  end
-
-  defp attempt_index(writer, document, schema, retries) when retries > 0 do
-    case TantivyEx.Document.add_with_schema(writer, document, schema) do
-      :ok ->
-        {:ok, :indexed}
-
-      {:error, reason} when retries > 1 ->
-        Logger.warning("Indexing failed, retrying: #{reason}")
-        :timer.sleep(100)  # Brief delay
-        attempt_index(writer, document, schema, retries - 1)
-
-      {:error, reason} ->
-        Logger.error("Indexing failed after retries: #{reason}")
-        {:error, {:indexing, reason}}
-    end
-  end
-end
-```
-
-### Data Consistency
-
-1. **Atomic Operations**: Ensure related documents are indexed together
-2. **Version Control**: Include version information in documents
-3. **Validation**: Implement comprehensive validation rules
-4. **Backup Strategy**: Regular index backups before major updates
-
-```elixir
-# Version-aware documents
-%{
-  "id" => "doc_123",
-  "version" => 3,
-  "title" => "Updated Document",
-  "last_modified" => DateTime.utc_now() |> DateTime.to_iso8601(),
-  "checksum" => :crypto.hash(:sha256, content) |> Base.encode16()
-}
-```
-
-## Troubleshooting
-
-### Common Issues
-
-#### Type Mismatch Errors
-
-```elixir
-# Problem: Wrong data type
-document = %{"price" => "not_a_number"}
-
-# Solution: Proper type conversion
-document = %{"price" => String.to_integer(price_string)}
-```
-
-#### Missing Required Fields
-
-```elixir
-# Problem: Document missing schema fields
-document = %{"title" => "Test"}  # Missing other required fields
-
-# Solution: Complete document validation
-defp ensure_required_fields(document, required_fields) do
-  missing = required_fields -- Map.keys(document)
-  if missing == [], do: {:ok, document}, else: {:error, "Missing: #{inspect(missing)}"}
-end
-```
-
-#### Large Document Performance
-
-```elixir
-# Problem: Very large documents causing memory issues
-huge_document = %{"content" => very_large_text}
-
-# Solution: Content chunking or field splitting
-def split_large_content(content, max_size \\ 10_000) do
-  if String.length(content) > max_size do
-    content
-    |> String.graphemes()
-    |> Enum.chunk_every(max_size)
-    |> Enum.map(&Enum.join/1)
-  else
-    [content]
-  end
-end
-```
-
-#### Batch Processing Failures
-
-```elixir
-# Problem: Entire batch fails due to one bad document
-documents = [good_doc1, bad_doc, good_doc2]
-
-# Solution: Filter and process valid documents
-def process_with_filtering(writer, documents, schema) do
-  {valid_docs, invalid_docs} =
-    Enum.split_with(documents, &valid_document?(&1, schema))
-
-  result = TantivyEx.Document.add_batch(writer, valid_docs, schema)
-
-  unless Enum.empty?(invalid_docs) do
-    Logger.warning("Skipped #{length(invalid_docs)} invalid documents")
-  end
-
-  result
-end
-```
-
-### Debugging Tips
-
-1. **Enable Logging**: Use Logger to track document processing
-2. **Validate Incrementally**: Test schema and documents separately
-3. **Check Field Types**: Verify field type definitions match your data
-4. **Monitor Memory**: Watch memory usage during large batch operations
-5. **Test with Small Batches**: Start with small batches to identify issues
-
-```elixir
-# Debug document structure
-def debug_document(document, schema) do
-  IO.puts("Document keys: #{inspect(Map.keys(document))}")
-  IO.puts("Schema fields: #{inspect(TantivyEx.Schema.field_names(schema))}")
-
-  # Check each field type
-  Enum.each(document, fn {field, value} ->
-    IO.puts("#{field}: #{inspect(value)} (#{inspect(value.__struct__ || typeof(value))})")
-  end)
-end
-```
-
-This comprehensive document guide provides everything you need to work effectively with documents in TantivyEx, from basic operations to advanced patterns and troubleshooting.
+Without a mapping, the nested objects are flattened, their keys joined with
+dots, so the keys of the object must be the field names.
