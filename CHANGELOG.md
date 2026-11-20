@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-20
+
 ### Added
 
 - **The guides' examples run as tests** - `test/guides_test.exs` runs the Elixir blocks of each guide in order, as in an IEx session, and checks the `# => value` comments. The README and the Quick Start Tutorial are rewritten on the actual API: all 9 examples of the tutorial failed.
